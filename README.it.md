@@ -1,76 +1,88 @@
-# Opencode Portable
+<p align="center">
+  <img src="assets/logo.png" width="160" alt="Logo Opencode Portable">
+</p>
 
-<img src="assets/logo.png" width="128" alt="Logo Opencode Portable">
+<h1 align="center">Opencode Portable</h1>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-![Windows 10 | 11](https://img.shields.io/badge/Windows-10%20%7C%2011-blue)
-[![Release](https://img.shields.io/github/v/release/terzastella/opencode-portable)](https://github.com/terzastella/opencode-portable/releases)
+<p align="center">Esegui <a href="https://github.com/anomalyco/opencode">opencode</a> come vera app portatile su <b>Windows 10 / 11</b>: doppio-click, scegli la cartella, lavora.<br>Chiudila — uscita, X, Ctrl+C, persino kill da Task Manager — e <b>non resta traccia</b>.</p>
+
+<p align="center">
+  <a href="README.md"><img src="https://img.shields.io/badge/English-read-lightgrey" alt="English"></a>
+  <a href="README.it.md"><img src="https://img.shields.io/badge/Italiano-selezionato-blue" alt="Italiano"></a>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-blue" alt="Windows 10 | 11">
+  <a href="https://github.com/terzastella/opencode-portable/releases"><img src="https://img.shields.io/github/v/release/terzastella/opencode-portable" alt="Release"></a>
+</p>
 
 > Pensato per i modelli gratuiti integrati di opencode — niente login, niente
 > provider da collegare. I provider esterni (NVIDIA, Anthropic, OpenAI, …)
 > **non sono stati testati** con questo progetto: le API key si possono dare
 > al volo ma le configurazioni provider non sono verificate.
-> Leggi in [English](README.md).
-
-Avvia [opencode](https://github.com/anomalyco/opencode) come **app portatile su
-Windows 10/11**: config, dati, cache, stato e temp restano dentro questa cartella. Niente in `%APPDATA%`, `%LOCALAPPDATA%`, `~/.config` o `~/.local/share` — e ciò che opencode crea fuori viene pulito solo se nato durante quella esecuzione.
-
-Testato con opencode `1.18.31` (versione snapshot; gli script di setup usano l'ultima upstream).
+>
+> Testato con opencode `1.18.31` (versione snapshot; gli script di setup usano l'ultima upstream).
 
 ## Download
 
-Niente installazione, niente setup: scarica **`OpencodePortable.exe`** dall'[ultima release](https://github.com/terzastella/opencode-portable/releases), mettilo dove vuoi (Desktop, chiavetta), doppio-click. Fine dell'installazione. (I launcher `.cmd`/`.ps1`/`.sh` e il supporto Linux/macOS sono nei sorgenti qui sotto.)
+Niente installazione, niente setup: scarica **`OpencodePortable.exe`** dall'[ultima release](https://github.com/terzastella/opencode-portable/releases),
+mettilo dove vuoi (Desktop, chiavetta), doppio-click. Fine dell'installazione.
 
 ## Avvio rapido
+
+1. **Doppio-click** su `OpencodePortable.exe`.
+2. **Scegli la cartella di lavoro** (dialog esplora-file, o trascinala nella console).
+3. **Lavora.** Alla chiusura, tutto ciò che l'app ha scritto — config, cache,
+   stato, tmp, binario — viene cancellato con la cartella per-run. Niente viene
+   mai scritto accanto all'exe.
+
+## Perché portatile
+
+| Aspetto | Cosa ottieni |
+|---|---|
+| Isolamento | Config, dati, cache, stato e temp in `<workspace>/.opencode-portable-<data>-<pid>-<rand>/`, cancellata all'uscita — normale, X/Alt+F4, Ctrl+C e kill Task Manager inclusi |
+| Offline | Binario opencode incorporato, estratto al primo avvio — mai rete |
+| Avvio veloce | Salta il fetch bloccante di 10–30 s da `models.dev` |
+| Niente login salvato | I modelli free integrati funzionano subito; le API key si danno al volo, mai salvate |
+| Istanze concorrenti | Ognuna ha la sua cartella — niente condivisioni, niente lock |
+
+## Verifica zero tracce
+
+Dopo un run, controlla che non resti nulla:
+
+```cmd
+:: 1. workspace pulita (mostra anche nascosti/system):
+dir "C:\percorso\workspace" /a
+:: 2. residui noti su C: (il solo exe è atteso):
+dir C:\*opencode* /s /b /a
+dir C:\opwatch-*.exe /s /b /a
+:: 3. nessun processo rimasto (tasklist non accetta *):
+tasklist | findstr /I "opencode opwatch"
+```
+
+Atteso: solo i tuoi file, solo l'exe, nessun processo.
+
+<details>
+<summary><b>Build dai sorgenti</b></summary>
 
 ```bash
 git clone https://github.com/terzastella/opencode-portable.git
 cd opencode-portable
 ```
 
-(Utenti finali: non serve — vedi [Download](#download) sopra.)
-
-### Opzione A — exe singolo (Windows, consigliato)
-
-Compila una volta (serve .NET 10 SDK), poi distribuisci solo l'exe — 100%
-offline a runtime, non scarica mai nulla:
-
 ```powershell
+# Exe all-in-one (serve .NET 10 SDK) — risolve l'ultimo opencode,
+# lo incorpora + hash, pubblica in dist/:
 .\scripts\publish-fat.ps1
-# -> dist/OpencodePortable.exe (~137 MB: runtime + opencode incorporato)
 ```
 
-Doppio-click: scegli la cartella di lavoro nel dialog, opencode parte lì
-dentro. Al primo avvio estrae da solo il binario incorporato (senza rete).
-Tutto ciò che l'app scrive — config, cache, stato, tmp, binario — sta in una
-cartella per-run `<workspace>/.opencode-portable-<data>-<pid>-<rand>/`,
-**cancellata all'uscita, sempre**: non devi cancellare nulla, sparisce da sé.
-Anche chiudere la finestra (X / Alt+F4) è gestito: prima il rename atomico in
-trash (istantaneo), poi kill dell'albero figlio e delete col tempo rimasto —
-gli eventuali resti li spazza il giro dopo. Ogni istanza concorrente ha la sua cartella; i resti da crash vengono spazzati
-al giro dopo (i processi vivi mai toccati). Niente viene mai scritto accanto
-all'exe, e il dialog riparte sempre da zero (nessuna memoria). Nessun login
-salvato: i modelli free integrati funzionano subito, le API key si danno al volo.
-Flag: `--workspace <dir>` salta il dialog, `--console` va diretto al
-drag-and-drop (per macchine dove il dialog nativo non funziona), `--from-path` riusa opencode
-da PATH (stesse regole fail-closed degli script), `--self-test` verifica
-il dialog nativo senza mostrarlo. Se il dialog shell non riesce a restituire
-la selezione, l'exe ripiega sul drag-and-drop nella console. (Il picker gira
-in un processo figlio: anche un crash nativo degrada al fallback invece di
-uccidere l'app.)
-La cancellazione riprova per secondi contro i file bloccati (immagine in uso,
-antivirus) e i resti vengono segnalati, mai silenziati; `--clean <workspace>`
-spazza le root stale su richiesta (es. dopo kill da Task Manager).
-Un processo guardiano copre anche i kill brutali: qualunque cosa termini il
-padre — uscita, crash, X, Task Manager — lo sveglia e cancella la cartella
-per-run. Gira come copia rinominata (`opwatch-<pid>-<rand>.exe`) staccata dalla
-console, quindi chiudere il gruppo-app da Task Manager non lo uccide; dopo aver
-pulito, la copia si autoelimina (quelle stale le spazza l'avvio dopo). Prima
-termina eventuali processi ancora in esecuzione da dentro la cartella, e scrive
-`%TEMP%\opencode-portable-watchdog-<pid>.log` (diagnostico; rimosso a successo,
-lasciato come prova in caso di fallimento).
+Architettura completa in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (in inglese).
 
-### Opzione B — script
+</details>
+
+<details>
+<summary><b>Opzione B — script (Windows .cmd/.ps1, Linux/macOS .sh)</b></summary>
 
 Scarica il binario per il tuo OS in `bin/` (i binari **non** sono committati su git):
 
@@ -104,8 +116,12 @@ opencode-portable.cmd --help
 ```
 
 Al primo avvio `config/opencode.json` viene creato da `config/opencode.example.json`.
+(`--help` è il flag di opencode: serve il binario scaricato, altrimenti i launcher falliscono chiusi.)
 
-## Struttura
+</details>
+
+<details>
+<summary><b>Struttura progetto</b></summary>
 
 ```
 .
@@ -132,10 +148,11 @@ Al primo avvio `config/opencode.json` viene creato da `config/opencode.example.j
 ├── README.md               # versione inglese
 └── README.it.md            # questo file
 ```
+
 (`bin/` contiene `opencode.exe` + `.gitkeep`; `config/` il template versionato;
 `dist/`, `data/`, `src/**/payload|bin|obj` sono output ignorati da git.)
 
-## Collegamenti desktop (Windows)
+Collegamenti desktop (Windows):
 
 ```powershell
 .\scripts\install-shortcuts.ps1            # crea collegamenti Desktop + Start Menu
@@ -144,20 +161,32 @@ Al primo avvio `config/opencode.json` viene creato da `config/opencode.example.j
 
 I collegamenti avviano `opencode-portable.cmd` con l'icona di `assets/opencode-portable.ico`. (Di proposito lo script, non l'exe: i collegamenti servono per l'uso veloce da terminale; l'exe è l'app da doppio-click.) Working directory: la root portable.
 
-## Come funziona
+</details>
+
+<details>
+<summary><b>Come funziona</b></summary>
 
 | Tema | Cosa fanno i launcher |
 |---|---|
 | Isolamento | `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME` → `data/...`, e `OPENCODE_CONFIG` → `config/opencode.json` |
-| Avvio veloce | `OPENCODE_DISABLE_MODELS_FETCH=1` (salta il fetch bloccante di 10–30s da `models.dev`) |
+| Avvio veloce | `OPENCODE_DISABLE_MODELS_FETCH=1` (salta il fetch bloccante di 10–30 s da `models.dev`) |
 | Temp | Tmp isolata per run (`TMP/TEMP/TMPDIR` dentro, cancellata all'uscita). Nomi diversi per launcher: `run-HHMMSS-RAND` (cmd), `run-aaaammgg-HHmmss-PID-rand` (ps1), `mktemp run-...-PID-XXX` (sh); l'exe non ha sottolivello (la root è già per-run) |
 | Residui da crash | Spazzati al giro dopo (exe + ps1/sh: solo PID morti, mai i vivi; cmd: età >7 giorni, senza check PID — divergenza documentata) |
 | Guard anti-sporco | Foto di `%TEMP%\opencode`, `%LOCALAPPDATA%\opencode`, `%APPDATA%\opencode` (Win) o `~/.config/opencode`, `~/.local/share/opencode`, `~/.cache/opencode` (Unix): rimosse solo se create da quella run |
 | Igiene env | `.ps1`/`.sh` ripristinano le variabili (`try/finally`, `trap`); istanze concorrenti sicure |
 
+L'exe aggiunge: picker supervisionato in processo figlio (il crash nativo degrada
+al drag-and-drop), cancellazione con retry contro i lock (resti segnalati, mai
+silenziosi), `--clean <workspace>`, e guardiano orfano (`opwatch-<pid>-<rand>.exe`
+autoeliminante) anche per i kill di gruppo da Task Manager. Telemetria in `%TEMP%`
+(rimossa a successo).
+
 Dettagli in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (in inglese).
 
-## Policy sui binari
+</details>
+
+<details>
+<summary><b>Policy sui binari</b></summary>
 
 `bin/`, `data/`, `dist/`, `src/**/payload|bin|obj` e `config/opencode.json` locale sono ignorati da git. La repo contiene **solo sorgenti**:
 
@@ -167,7 +196,10 @@ Dettagli in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (in inglese).
 
 Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-release.sh` fa `opencode-portable-linux-macos.tar.gz`. Entrambi scansionano i segreti e non includono mai `data/`, `bin/*`, `dist/` o config locali. L'exe all-in-one (`dist/`) non si committa mai (~137 MB).
 
-## Note di sicurezza
+</details>
+
+<details>
+<summary><b>Note di sicurezza</b></summary>
 
 - **I binari sono artefatti upstream fidati**: `setup.*` scarica e `publish-fat.ps1` incorpora via HTTPS dalle GitHub releases, senza checksum. Se upstream pubblicherà hash/firme, verificali prima di eseguire.
 - **Le credenziali stanno in `data/` (script) o `<workspace>/.opencode-portable-*/` (exe)** (token auth, API key): non condividere né pubblicare quelle cartelle, e non distribuire archivi che le contengono — `pack-release` le esclude di proposito. Chiavetta persa = credenziali perse.
@@ -177,7 +209,10 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 - **Aggiornamenti**: nessun auto-update (`autoupdate: false`); ogni release fissa la sua versione di opencode al build (`publish-fat` risolve latest lì, incorpora + hash). Per aggiornare, scarica la nuova release.
 - **Niente Windows Error Reporting**: l'exe silenzia il WER per i propri crash (compresi gli AV supervisionati del picker) così nulla finisce in `ReportArchive`; la diagnostica resta nei nostri `crash-*.log`. `--clean-host` rimuove le nostre tracce host-side (vecchi archivi WER, telemetria watchdog, dir crash TEMP) — per i preesistenti può servire admin.
 
-## Flag exe e exit code
+</details>
+
+<details>
+<summary><b>Flag exe e exit code</b></summary>
 
 | Flag | Effetto |
 |---|---|
@@ -197,7 +232,10 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 
 Exit code: `0` = ok / picker annullato / `--clean-host` fatto; `1` = workspace invalida, binario/config mancanti, fallback fallito, self-test fallito, `--clean` senza dir, `--watch` malformato, abort guardiano, errore fatale (MessageBox + `crash-*.log` con righe); `2` = errore interno figlio picker (il padre ripiega); altrimenti propaga quello di opencode.
 
-## Config
+</details>
+
+<details>
+<summary><b>Config</b></summary>
 
 Flusso script: modifica `config/opencode.json` (default sensati per portable). Il template è `config/opencode.example.json`; cancella `opencode.json` per tornare ai default.
 
@@ -207,6 +245,12 @@ Nota: questo progetto punta ai modelli free integrati di opencode — niente log
 niente provider esterni da collegare. Login/auth non persistono mai per l'exe
 (root fresca a ogni run); eventuali API key di altri modelli si danno al volo,
 mai salvate (vedi [HOW-IT-WORKS](docs/HOW-IT-WORKS.md) § Auth note).
+
+</details>
+
+## Documentazione
+
+Architettura completa: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (in inglese).
 
 ## Licenza
 
