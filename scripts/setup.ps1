@@ -25,8 +25,18 @@ if ($Version -ne "") {
   $Url = "https://github.com/$Repo/releases/download/v$Version/$FileName"
   Write-Host "[setup] downloading v$Version : $FileName"
 } else {
-  $Url = "https://github.com/$Repo/releases/latest/download/$FileName"
-  Write-Host "[setup] downloading latest: $FileName"
+  # Pinned by default (reproducible): explicit -Version always wins.
+  $PinnedFile = Join-Path $Root 'UPSTREAM_VERSION'
+  $pinned = ""
+  if (Test-Path -LiteralPath $PinnedFile) { $pinned = (Get-Content -LiteralPath $PinnedFile -Raw).Trim() }
+  if ($pinned -match '^\d+\.\d+\.\d+$') {
+    $Version = $pinned
+    $Url = "https://github.com/$Repo/releases/download/v$Version/$FileName"
+    Write-Host "[setup] downloading pinned v$Version (UPSTREAM_VERSION) : $FileName"
+  } else {
+    $Url = "https://github.com/$Repo/releases/latest/download/$FileName"
+    Write-Host "[setup] downloading latest: $FileName"
+  }
 }
 
 $Tmp = Join-Path ([IO.Path]::GetTempPath()) ("opencode-setup-" + [Guid]::NewGuid().ToString('N'))

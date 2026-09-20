@@ -205,7 +205,7 @@ For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pa
 <details>
 <summary><b>Security notes</b></summary>
 
-- **Binaries are trusted upstream artifacts**: `setup.*` downloads and `publish-fat.ps1` embeds over HTTPS from GitHub releases, with no checksum pinning. If upstream ever publishes hashes/signatures, verify them before running.
+- **Binaries are trusted upstream artifacts**: `setup.*` downloads and `publish-fat.ps1` embeds over HTTPS from GitHub releases. The embedded payload hash (SHA-256) is pinned at build time and re-verified before every extraction; setup scripts default to the pinned `UPSTREAM_VERSION` (explicit `-Version` wins). Missing piece (no unilateral fix): upstream publishes no checksums/signatures, so there is no independent trust anchor — if they ever do, verify against them.
 - **Credentials live in `data/` (scripts) or `<workspace>/.opencode-portable-*/` (exe)** (auth tokens, API keys): never share or publish those folders, and never ship an archive containing them — `pack-release` excludes them by design. A lost USB stick means lost credentials.
 - **Downloaded zips carry Mark-of-the-Web**: on other PCs Windows may block the `.ps1` launchers (execution policy). Use `opencode-portable.cmd`, or `Unblock-File`, after inspecting the content.
 - This wrapper isolates files, it does **not sandbox** opencode itself: an AI coding agent runs shell commands in your workspace — review what it does, as with any upstream install.

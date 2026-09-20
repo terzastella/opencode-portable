@@ -45,8 +45,19 @@ target="$os-$arch"
 filename="opencode-$target$ext"
 
 if [ -z "$VERSION" ]; then
-  url="https://github.com/$REPO/releases/latest/download/$filename"
-  echo "[setup] downloading latest: $filename"
+  # Pinned by default (reproducible): explicit --version always wins.
+  pinned=""
+  if [ -f "$ROOT/UPSTREAM_VERSION" ]; then
+    pinned="$(tr -d '[:space:]' < "$ROOT/UPSTREAM_VERSION")"
+  fi
+  if [[ "$pinned" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    VERSION="$pinned"
+    url="https://github.com/$REPO/releases/download/v$VERSION/$filename"
+    echo "[setup] downloading pinned v$VERSION (UPSTREAM_VERSION): $filename"
+  else
+    url="https://github.com/$REPO/releases/latest/download/$filename"
+    echo "[setup] downloading latest: $filename"
+  fi
 else
   url="https://github.com/$REPO/releases/download/v$VERSION/$filename"
   echo "[setup] downloading v$VERSION: $filename"
