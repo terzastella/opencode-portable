@@ -29,8 +29,9 @@ internal static class PortableRun
     // before it has done its job (it only waits on a process handle).
     private static readonly ConsoleCtrlDelegate s_ignoreHandler = _ => true;
 
-    // Shared with the close handler (other thread): child to kill, root to clean.
-    private static Process? s_child;
+    // Shared with the close handler (other thread): read via local snapshot,
+    // never twice (a second read could see a disposed object).
+    private static volatile Process? s_child;
     private static string? s_dataRoot;
 
     private const uint CTRL_CLOSE_EVENT = 2;
@@ -338,8 +339,12 @@ internal static class PortableRun
             // Belt and braces: terminate anything still executing from inside the
             // root (surviving children hold image locks that defeat deletion).
             // Only processes whose image lives under our unique root: safe by
-            // construction. Never touch self.
+            // construction. Never touch self. dir is canonicalized once so a
+            // trailing slash or \\?\ prefix can't defeat the prefix match.
             int me = Environment.ProcessId;
+            string dirCanon;
+            try { dirCanon = Path.GetFullPath(dir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)); }
+            catch { dirCanon = dir; }
             try
             {
                 foreach (var p in Process.GetProcesses())
@@ -348,7 +353,7 @@ internal static class PortableRun
                     try { img = p.MainModule?.FileName; } catch { }
                     if (string.IsNullOrEmpty(img)) continue;
                     if (p.Id == me || p.Id == parentPid) continue;
-                    if (!img.StartsWith(dir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!img.StartsWith(dirCanon + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
                     try
                     {
                         Tele($"kill residuo pid={p.Id} img={img}");

@@ -25,6 +25,9 @@ jobs:
 
       - name: Self-tests
         shell: pwsh
+        env:
+          # Diagnostic --test-* flags are gated behind this opt-in.
+          OPENCODE_ENABLE_TESTFLAGS: 1
         run: |
           $ErrorActionPreference = 'Stop'
           $exe = 'dist/OpencodePortable.exe'

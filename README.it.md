@@ -234,7 +234,7 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 | `--clean <dir>` | Spazza le root stale senza avviare nulla; errore se manca la dir |
 | `--clean-host` | Rimuove le nostre tracce host (archivi WER, telemetria, dir crash TEMP); sempre exit 0 |
 | `--self-test` | Smoke test COM non-UI (istanzia + opzioni + check WER, niente dialog) |
-| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-detached`, `--test-junction`, `--test-midrun-delete` | Self-test interni (vedi sorgenti) |
+| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-detached`, `--test-junction`, `--test-midrun-delete` | Self-test interni, attivi solo con `OPENCODE_ENABLE_TESTFLAGS=1` (vedi sorgenti) |
 | `--report-console <file>` | Scrive l'handle console del processo (sonda distacco) |
 | `--has-payload` | Info sul payload incorporato; exit 0 se presente (usato da publish-fat) |
 | `--` | Tutto ciò che segue va a opencode così com'è, anche flag da launcher |

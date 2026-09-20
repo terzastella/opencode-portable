@@ -238,7 +238,7 @@ For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pa
 | `--clean <dir>` | Sweep stale roots without launching; errors on missing dir |
 | `--clean-host` | Remove own host traces (WER archives, watchdog telemetry, TEMP crash dir); always exit 0 |
 | `--self-test` | Non-UI COM smoke test (instantiate + options + WER-silenced check, no dialog shown) |
-| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-detached`, `--test-junction`, `--test-midrun-delete` | Built-in self-tests (see source) |
+| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-detached`, `--test-junction`, `--test-midrun-delete` | Built-in self-tests, gated behind `OPENCODE_ENABLE_TESTFLAGS=1` (see source) |
 | `--report-console <file>` | Write this process' console HWND (detachment probe) |
 | `--has-payload` | Report embedded payload info; exit 0 iff present (used by publish-fat) |
 | `--` | Everything after is forwarded to opencode verbatim, even launcher-like flags |

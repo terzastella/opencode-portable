@@ -121,7 +121,41 @@ try {
   # Airtight check (not a size heuristic): the exe itself reports the payload.
   & $exe --has-payload
   if ($LASTEXITCODE -ne 0) { throw "payload NOT embedded (see --has-payload output above)." }
+  # Release hash of the final exe (what users verify after download).
+  $exeHash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+  $exeHash | Set-Content -LiteralPath ($exe + '.sha256') -NoNewline
+  # Minimal CycloneDX SBOM: ingredients list with versions, licenses, hashes.
+  $zipHash = (Get-FileHash -LiteralPath $PayloadZip -Algorithm SHA256).Hash.ToLowerInvariant()
+  $appVersion = ([regex]::Match((Get-Content -LiteralPath (Join-Path $Root 'src\OpencodePortable\OpencodePortable.csproj') -Raw), '<Version>([^<]+)</Version>').Groups[1].Value).Trim()
+  if ($appVersion -eq "") { $appVersion = "0.0.0-unknown" }
+  $sdkLine = (& dotnet --list-runtimes 2>$null | Where-Object { $_ -like 'Microsoft.NETCore.App 10.*' } | Select-Object -First 1)
+  $runtimeVer = if ($sdkLine -match '(\d+\.\d+\.\d+)') { $Matches[1] } else { "10.x" }
+  $sbom = [ordered]@{
+    bomFormat = "CycloneDX"
+    specVersion = "1.5"
+    version = 1
+    metadata = [ordered]@{
+      timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+      supplier = [ordered]@{ name = "Terzastella"; url = @("https://github.com/terzastella/opencode-portable") }
+      component = [ordered]@{ type = "application"; name = "OpencodePortable"; version = $appVersion }
+    }
+    components = @(
+      [ordered]@{
+        type = "application"; name = "opencode (upstream embedded payload)"; version = $Version
+        hashes = @([ordered]@{ alg = "SHA-256"; content = $zipHash })
+        licenses = @([ordered]@{ license = [ordered]@{ id = "MIT" } })
+        externalReferences = @([ordered]@{ type = "distribution"; url = $Url })
+      },
+      [ordered]@{
+        type = "framework"; name = "Microsoft.NETCore.App (self-contained runtime)"; version = $runtimeVer
+        licenses = @([ordered]@{ license = [ordered]@{ id = "MIT" } })
+      }
+    )
+  }
+  $sbomPath = Join-Path $OutDir 'OpencodePortable.exe.cdx.json'
+  ($sbom | ConvertTo-Json -Depth 6) | Set-Content -LiteralPath $sbomPath
   Step ("OK -> {0} ({1:N1} MB, payload v{2} embedded)" -f $exe, ($exeSize / 1MB), $Version)
+  Step ("artifacts: exe + .sha256 + .cdx.json in {0}" -f $OutDir)
 } finally {
   # Remove only what we downloaded (.zip + .sha256); never wipe a pre-existing payload dir.
   foreach ($f in @($PayloadZip, (Join-Path $PayloadDir 'opencode.zip.sha256'))) {

@@ -169,7 +169,7 @@ internal static class NativeFolderDialog
                     $"folder dialog failed — COM trace: {string.Join(" | ", trace)}", ex);
             }
         }
-        finally { Marshal.ReleaseComObject(dlg); }
+        finally { if (dlg is not null) { try { Marshal.ReleaseComObject(dlg); } catch { } } }
     }
 
     private static int Check(int hr, string method, List<string> trace)

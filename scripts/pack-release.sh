@@ -11,9 +11,10 @@ mkdir -p "$OUT_DIR"
 
 INCLUDE=(
   opencode-portable.cmd opencode-portable.ps1 opencode-portable.sh
-  LICENSE README.md README.it.md
+  LICENSE README.md README.it.md SECURITY.md CHANGELOG.md
+  THIRD-PARTY-NOTICES.md UPSTREAM_VERSION global.json
   assets bin/.gitkeep config/opencode.example.json
-  docs scripts
+  docs scripts .github
 )
 
 echo "[pack] validating include list..."
