@@ -33,6 +33,8 @@ if ($Arch -eq "") {
 $Rid = "win-$Arch"
 
 $Repo = 'anomalyco/opencode'
+$headers = @{}
+if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)" }
 $PinnedFile = Join-Path $Root 'UPSTREAM_VERSION'
 if ($Version -eq "" -or $Version -eq "latest") {
   # Pinned by default: reproducible releases. An explicit -Version always wins.
@@ -43,8 +45,6 @@ if ($Version -eq "" -or $Version -eq "latest") {
     Step "using pinned upstream v$Version (from UPSTREAM_VERSION; -Version overrides)."
   } else {
     Step "resolving latest release (no valid UPSTREAM_VERSION pin)..."
-    $headers = @{}
-    if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)" }
     $rel = $null
     for ($i = 1; $i -le 3 -and $null -eq $rel; $i++) {
       try { $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers $headers -TimeoutSec 60 }

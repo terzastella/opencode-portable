@@ -48,9 +48,17 @@ internal static class Program
                 string logDir = s_crashDir ?? Path.Combine(Path.GetTempPath(),
                     "opencode-portable-crash-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(logDir);
-                // Privacy: scrub the username from paths; keep only the last 5 logs.
-                string profile = Environment.GetEnvironmentVariable("USERPROFILE") ?? "";
-                if (!string.IsNullOrEmpty(profile)) stack = stack.Replace(profile, "~", StringComparison.OrdinalIgnoreCase);
+                // Privacy: scrub identity-bearing path fragments (username in all
+                // common forms, home drives, hostname); keep only the last 5 logs.
+                foreach (string var in new[] { "USERPROFILE", "HOMEDRIVE", "HOMEPATH" })
+                {
+                    string val = Environment.GetEnvironmentVariable(var) ?? "";
+                    if (!string.IsNullOrEmpty(val)) stack = stack.Replace(val, "~", StringComparison.OrdinalIgnoreCase);
+                }
+                string user = Environment.GetEnvironmentVariable("USERNAME") ?? "";
+                if (!string.IsNullOrEmpty(user)) stack = stack.Replace(user, "~user", StringComparison.OrdinalIgnoreCase);
+                string host = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "";
+                if (!string.IsNullOrEmpty(host)) stack = stack.Replace(host, "~host", StringComparison.OrdinalIgnoreCase);
                 File.WriteAllText(
                     Path.Combine(logDir, $"crash-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Environment.ProcessId}.log"),
                     $"[{DateTime.Now:O}] {stack}\nLauncherFlags: {ownedCount}\n");
@@ -309,7 +317,7 @@ internal static class Program
             if (args[i] == "--picker-exe") { if (i + 1 >= args.Length) { Console.Error.WriteLine("[opencode-portable] ERRORE: --picker-exe richiede un percorso."); return 1; } pickerExe = args[++i]; continue; }
             if (args[i].StartsWith("--picker-exe=")) { pickerExe = args[i]["--picker-exe=".Length..]; continue; }
             if (args[i] == "--workspace") { if (i + 1 >= args.Length) { Console.Error.WriteLine("[opencode-portable] ERRORE: --workspace richiede una cartella."); return 1; } workspace = args[++i]; if (workspace.StartsWith("--")) { Console.Error.WriteLine("[opencode-portable] ERRORE: --workspace richiede una cartella, non un flag."); return 1; } continue; }
-            if (args[i].StartsWith("--workspace=")) { workspace = args[i]["--workspace=".Length..]; continue; }
+            if (args[i].StartsWith("--workspace=")) { workspace = args[i]["--workspace=".Length..]; if (string.IsNullOrWhiteSpace(workspace) || workspace.StartsWith("--")) { Console.Error.WriteLine("[opencode-portable] ERRORE: --workspace= richiede una cartella valida."); return 1; } continue; }
             if (args[i] == "--self-test")
             {
                 if (NativeFolderDialog.SelfTest(out string detail))
@@ -424,6 +432,16 @@ internal static class Program
             {
                 if (!TestsEnabled()) return 1;
                 return PortableRun.TestMidrunDelete();
+            }
+            if (args[i] == "--test-race")
+            {
+                if (!TestsEnabled()) return 1;
+                return PortableRun.TestRace();
+            }
+            if (args[i] == "--test-longpath")
+            {
+                if (!TestsEnabled()) return 1;
+                return PortableRun.TestLongPath();
             }
             if (args[i] == "--has-payload")
             {

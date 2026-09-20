@@ -32,7 +32,7 @@ internal static class PortableRun
     // Shared with the close handler (other thread): read via local snapshot,
     // never twice (a second read could see a disposed object).
     private static volatile Process? s_child;
-    private static string? s_dataRoot;
+    private static volatile string? s_dataRoot;
 
     private const uint CTRL_CLOSE_EVENT = 2;
     private const uint CTRL_LOGOFF_EVENT = 5;
@@ -234,6 +234,110 @@ internal static class PortableRun
     /// Host-guard cleanup: never follow reparse points (a planted link must
     /// not turn the guard into deletion elsewhere).
     /// </summary>
+    /// <summary>
+    /// Test hook (--test-race): hammers a junction swap INTO a directory being
+    /// deleted by RobustDelete on another thread (5000 files widen the window).
+    /// Asserts the victim target ALWAYS survives and the root is gone. Reports
+    /// how many swaps actually landed mid-delete (honest signal, not vacuous).
+    /// </summary>
+    public static int TestRace()
+    {
+        string baseDir = Path.Combine(Path.GetTempPath(),
+            "opencode-testrace-" + Guid.NewGuid().ToString("N"));
+        string root = Path.Combine(baseDir, ".opencode-portable-test");
+        string sub = Path.Combine(root, "sub");
+        string victim = Path.Combine(baseDir, "victim-outside");
+        try
+        {
+            Directory.CreateDirectory(sub);
+            Directory.CreateDirectory(victim);
+            File.WriteAllText(Path.Combine(victim, "sentinel.txt"), "do-not-touch");
+            for (int i = 0; i < 5000; i++)
+                File.WriteAllText(Path.Combine(sub, $"f{i:D4}.bin"), "x");
+            int swapsLanded = 0;
+            var cts = new System.Threading.CancellationTokenSource();
+            var swapper = Task.Run(() =>
+            {
+                var end = DateTime.Now.AddSeconds(8);
+                while (DateTime.Now < end && !cts.Token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        // Try to swap sub with a junction to victim mid-delete.
+                        if (Directory.Exists(sub) && !IsReparsePoint(sub))
+                        {
+                            Directory.Delete(sub, recursive: true);
+                            var psi = new ProcessStartInfo
+                            {
+                                FileName = "cmd.exe",
+                                Arguments = "/c mklink /J \"" + sub + "\" \"" + victim + "\"",
+                                UseShellExecute = false,
+                                CreateNoWindow = true,
+                            };
+                            using var p = Process.Start(psi);
+                            p?.WaitForExit(2000);
+                            if (IsReparsePoint(sub)) swapsLanded++;
+                        }
+                    }
+                    catch { }
+                    Thread.Sleep(50);
+                }
+            });
+            var left = RobustDelete(root, 30000);
+            cts.Cancel();
+            try { swapper.Wait(5000); } catch { }
+            bool victimOk = File.Exists(Path.Combine(victim, "sentinel.txt"));
+            bool rootGone = !Directory.Exists(root);
+            Console.WriteLine($"[test-race] swapsLanded={swapsLanded} victimOk={victimOk} rootGone={rootGone} leftovers={left.Count}");
+            bool ok = victimOk && rootGone;
+            Console.WriteLine(ok ? "[test-race] OK" : "[test-race] FALLITO");
+            return ok ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[test-race] ERRORE: {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(baseDir, recursive: true); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Test hook (--test-longpath): ~300-char nested paths with files, deleted
+    /// via RobustDelete. Guards against MAX_PATH-era assumptions.
+    /// </summary>
+    public static int TestLongPath()
+    {
+        string baseDir = Path.Combine(Path.GetTempPath(),
+            "opencode-testlongpath-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string deep = baseDir;
+            for (int i = 0; i < 12; i++)
+                deep = Path.Combine(deep, new string((char)('a' + (i % 26)), 20));
+            Directory.CreateDirectory(deep);
+            File.WriteAllText(Path.Combine(deep, "deep-file.txt"), "x");
+            Console.WriteLine($"[test-longpath] depth={deep.Length} chars");
+            var left = RobustDelete(baseDir, 15000);
+            bool gone = !Directory.Exists(baseDir);
+            Console.WriteLine($"[test-longpath] gone={gone} leftovers={left.Count}");
+            bool ok = gone;
+            Console.WriteLine(ok ? "[test-longpath] OK" : "[test-longpath] FALLITO");
+            return ok ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[test-longpath] ERRORE: {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(baseDir, recursive: true); } catch { }
+        }
+    }
+
     private static void DeletePath(string path)
     {
         try { DeleteTreeNoFollow(path); }
@@ -252,7 +356,7 @@ internal static class PortableRun
         // failure/abort/leftovers (a silent watchdog is undebuggable, but a
         // successful run must leave zero host traces). Random suffix, capped.
         string telePath = Path.Combine(Path.GetTempPath(),
-            $"opencode-portable-watchdog-{parentPid}-{Random.Shared.Next(1000000)}.log");
+            $"opencode-portable-watchdog-{parentPid}-{System.Security.Cryptography.RandomNumberGenerator.GetInt32(1000000, 9999999)}.log");
         var teleBuf = new List<string>();
         void Tele(string msg)
         {
@@ -762,25 +866,42 @@ internal static class PortableRun
         }
     }
 
+    /// <summary>
+    /// Clears ReadOnly attributes WITHOUT following reparse points: manual
+    /// non-recursive walk, skipping links (a junction must never lead us to
+    /// chmod targets outside our root).
+    /// </summary>
     private static void ClearReadOnly(string root)
     {
         try
         {
-            var opts = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 };
-            foreach (string e in Directory.GetFileSystemEntries(root, "*", opts))
+            var stack = new Stack<string>();
+            stack.Push(root);
+            while (stack.Count > 0)
             {
-                try
+                string dir = stack.Pop();
+                string[] entries;
+                try { entries = Directory.GetFileSystemEntries(dir); }
+                catch { continue; }
+                foreach (string e in entries)
                 {
-                    var a = File.GetAttributes(e);
-                    if ((a & FileAttributes.ReadOnly) != 0)
-                        File.SetAttributes(e, a & ~FileAttributes.ReadOnly);
+                    try
+                    {
+                        var a = File.GetAttributes(e);
+                        if ((a & FileAttributes.ReparsePoint) != 0) continue;
+                        if ((a & FileAttributes.ReadOnly) != 0)
+                            File.SetAttributes(e, a & ~FileAttributes.ReadOnly);
+                        if ((a & FileAttributes.Directory) != 0)
+                            stack.Push(e);
+                    }
+                    catch { }
                 }
-                catch { }
             }
             try
             {
                 var a = File.GetAttributes(root);
-                if ((a & FileAttributes.ReadOnly) != 0)
+                if ((a & FileAttributes.ReadOnly) != 0
+                    && (a & FileAttributes.ReparsePoint) == 0)
                     File.SetAttributes(root, a & ~FileAttributes.ReadOnly);
             }
             catch { }
@@ -917,7 +1038,7 @@ internal static class PortableRun
     internal static string? SpawnWatchdogCopy(string data, int parentPid, long parentTicks)
     {
         string copy = Path.Combine(Path.GetTempPath(),
-            $"opwatch-{parentPid}-{Random.Shared.Next(1000000)}.exe");
+            $"opwatch-{parentPid}-{System.Security.Cryptography.RandomNumberGenerator.GetInt32(1000000, 9999999)}.exe");
         try
         {
             string self = Environment.ProcessPath ?? "";

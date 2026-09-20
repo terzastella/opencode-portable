@@ -154,6 +154,12 @@ On first run `config/opencode.json` is auto-created from `config/opencode.exampl
 │   └── install-shortcuts.ps1  # Desktop + Start Menu shortcuts with icon
 ├── src/OpencodePortable/   # C# source of the single-file exe
 ├── docs/HOW-IT-WORKS.md    # architecture details
+├── .github/workflows/      # CI: smoke on push/PR, full payload on tags
+├── UPSTREAM_VERSION        # pinned upstream opencode version
+├── global.json             # pinned .NET SDK
+├── THIRD-PARTY-NOTICES.md  # components, versions, licenses
+├── SECURITY.md             # policy, scope, disclosure
+├── CHANGELOG.md            # release history
 ├── LICENSE                 # MIT
 ├── README.md               # this file (EN)
 └── README.it.md            # Italian version
@@ -170,7 +176,7 @@ Desktop shortcuts (Windows):
 .\scripts\install-shortcuts.ps1 -Uninstall # remove them
 ```
 
-Shortcuts launch `opencode-portable.cmd` with the custom icon from `assets/opencode-portable.ico`. (Deliberately the script, not the exe: shortcuts are for quick terminal use; the exe is the double-click app.) Working directory is the portable root.
+Shortcuts launch `opencode-portable.cmd` with the custom icon from `assets/opencode-portable.ico`. (Deliberately the script, not the exe: shortcuts are for quick terminal use; the exe is the double-click app. Windows-only script; validates its folders first.) Working directory is the portable root.
 
 </details>
 
@@ -181,16 +187,16 @@ Shortcuts launch `opencode-portable.cmd` with the custom icon from `assets/openc
 |---|---|
 | Isolation | Set `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME` to `data/...`, and `OPENCODE_CONFIG` to `config/opencode.json` |
 | Fast startup | Set `OPENCODE_DISABLE_MODELS_FETCH=1` (skips the blocking 10–30 s `models.dev` fetch) |
-| Temp | Isolated per-run tmp (`TMP/TEMP/TMPDIR` point inside it, deleted on exit). Naming differs per launcher: `run-HHMMSS-RAND` (cmd), `run-yyyyMMdd-HHmmss-PID-rand` (ps1), `mktemp run-...-PID-XXX` (sh); the exe needs no sub-level (its root is already per-run) |
-| Crash leftovers | Swept next run (exe + ps1/sh: dead PID only, live never touched; cmd: age >7 days, no PID check — documented divergence) |
-| Host pollution guard | Snapshot `%TEMP%\opencode`, `%LOCALAPPDATA%\opencode`, `%APPDATA%\opencode` (Win) or `~/.config/opencode`, `~/.local/share/opencode`, `~/.cache/opencode` (Unix) and remove them on exit **only if this run created them** |
+| Temp | Isolated per-run tmp (`TMP/TEMP/TMPDIR` point inside it, deleted on exit). Naming differs per launcher: `run-HHMMSScc-RAND` (cmd, locale-sanitized), `run-yyyyMMdd-HHmmss-PID-rand` (ps1), `mktemp run-YYYYMMDD-HHMMSS-PID-XXX` (sh); the exe needs no sub-level (its root is already per-run) |
+| Crash leftovers | Swept next run (exe + ps1: dead PID + exact stamp only, live never touched; sh: PID-liveness without stamp regex; cmd: age >7 days, no PID check — documented divergences) |
+| Host pollution guard | Snapshot `%TEMP%\opencode`, `%LOCALAPPDATA%\opencode`, `%APPDATA%\opencode` (Win) or `~/.config/opencode`, `~/.local/share/opencode`, `~/.cache/opencode` (Unix) and remove them on exit **only if this run created them** (exe also covers `%USERPROFILE%\.config\opencode` + `.local\share\opencode`) |
 | Env hygiene | `.ps1`/`.sh` restore or scope env vars (`try/finally`, `trap`); concurrent instances are safe |
 
 The exe adds: supervised child folder picker (native crash degrades to
 drag-and-drop fallback), deletion retried against locked files (leftovers
 reported, never silent), `--clean <workspace>` sweeper, and an orphan watchdog
 (`opwatch-<pid>-<rand>.exe`, self-deleting) covering even Task Manager group
-kills. Watchdog telemetry lives in `%TEMP%` (removed on success).
+kills. Watchdog telemetry is written to `%TEMP%` only on failure/abort/leftovers, never on success.
 
 See [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) for details.
 
@@ -205,7 +211,7 @@ See [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) for details.
 - `scripts/setup.sh` → `opencode-linux-x64.tar.gz` / `opencode-darwin-arm64.zip`, etc. (fails fast on unsupported OS/arch)
 - If `bin/` is empty the launchers **refuse to run** (fail-closed): reusing `opencode` from `PATH` requires explicit opt-in (`--from-path` — stripped anywhere by exe/cmd, first-arg-only by ps1/sh — or `OPENCODE_ALLOW_PATH_FALLBACK=1`), and the resolved path is always printed. The exe prefers a bundled binary and only then looks at PATH.
 
-For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pack-release.sh` builds `opencode-portable-linux-macos.tar.gz`. Both secret-scan the content and never include `data/`, `bin/*`, `dist/` or local configs. The all-in-one exe itself (`dist/`) is never committed (~137 MB).
+For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pack-release.sh` builds `opencode-portable-linux-macos.tar.gz`. Both secret-scan the content and never include `data/`, `bin/*` (except `.gitkeep`), `dist/` or local configs. The all-in-one exe itself (`dist/`) is never committed (~137 MiB / ~144 MB).
 
 </details>
 
@@ -218,8 +224,8 @@ For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pa
 - This wrapper isolates files, it does **not sandbox** opencode itself: an AI coding agent runs shell commands in your workspace — review what it does, as with any upstream install.
 - **Trust model**: the workspace is NOT a security boundary — use only folders you trust (no network shares, synced folders writable by others, or untrusted repos); anyone who can write the workspace can influence config, cache and extracted binaries. Same for `--from-path` / `OPENCODE_ALLOW_PATH_FALLBACK=1`: it bypasses the bundled-payload trust and runs whatever `opencode` is first in PATH — resolved path is always printed, hash it yourself if unsure.
 - **Updates**: no auto-update (`autoupdate: false`); each release pins its opencode version in `UPSTREAM_VERSION` at build time (`publish-fat` uses the file unless `-Version` overrides it, then embeds + hashes it). To update, bump the file and download the new release.
-- **CI**: every push/PR builds on Windows and runs the self-test suite (status badge below).
-- **No Windows Error Reporting**: the exe silences WER for its own crashes (including supervised picker-child AVs) so nothing lands in `ReportArchive`; diagnostics stay in our own `crash-*.log`. `--clean-host` removes our host-side traces (old WER archives, watchdog telemetry leftovers, TEMP crash dir) — pre-existing archives may need admin.
+- **CI**: every push/PR builds on Windows and runs the self-test suite (status badge above; tags run an extra full-payload `fat` job).
+- **No Windows Error Reporting**: the exe silences WER for its own crashes (including supervised picker-child AVs) so nothing lands in `ReportArchive`; diagnostics stay in our own `crash-*.log` (`<root>/state/` normally, `%TEMP%\opencode-portable-crash-*/` only if crashing before any workspace is known; last 5 kept, usernames scrubbed). `--clean-host` removes our host-side traces (old WER archives, watchdog telemetry leftovers, TEMP crash dir) — pre-existing archives may need admin.
 - **"Zero traces" scope**: this removes application-created files and known runtime artifacts (verified with the checklist below). It is **not** forensic anti-tracking: OS/security telemetry outside our control (Prefetch, Defender/SmartScreen telemetry, USN Journal, pagefile, shell history, antivirus logs) cannot be removed by any portable app.
 
 </details>
@@ -235,15 +241,16 @@ For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pa
 | `--picker-exe <path>` / `--picker-exe=<path>` | Use another executable as the picker child (diagnostics) |
 | `--pick-folder [title] [initial]` | Child mode: native dialog, stdout protocol `PICK-OK` (0) / `PICK-CANCEL` (1) / `PICK-ERROR` (2) |
 | `--watch <pid> <ticks> <dir>` | Watchdog mode (spawned automatically, orphan hop) |
+| `--watch-hop <pid> <ticks> <dir>` | Internal hop: spawns the detached `--watch` grandchild and exits (do not call directly) |
 | `--clean <dir>` | Sweep stale roots without launching; errors on missing dir |
 | `--clean-host` | Remove own host traces (WER archives, watchdog telemetry, TEMP crash dir); always exit 0 |
-| `--self-test` | Non-UI COM smoke test (instantiate + options + WER-silenced check, no dialog shown) |
-| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-detached`, `--test-junction`, `--test-midrun-delete` | Built-in self-tests, gated behind `OPENCODE_ENABLE_TESTFLAGS=1` (see source) |
-| `--report-console <file>` | Write this process' console HWND (detachment probe) |
+| `--self-test` | Non-UI COM smoke test only (instantiate + options + WER-silenced check, never `Show` — needs no human click) |
+| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-watchdog-hop`, `--test-detached`, `--test-junction`, `--test-midrun-delete`, `--test-race`, `--test-longpath` | Built-in self-tests, gated behind `OPENCODE_ENABLE_TESTFLAGS=1` (see source) |
+| `--report-console <file>` | Detachment probe, gated like the test flags above |
 | `--has-payload` | Report embedded payload info; exit 0 iff present (used by publish-fat) |
 | `--` | Everything after is forwarded to opencode verbatim, even launcher-like flags |
 
-Exit codes: `0` = ok / picker cancelled / `--clean-host` done; `1` = invalid workspace, missing binary/config, failed fallback, failed self-test, `--clean` missing dir, `--watch` misuse, watchdog abort, fatal error (MessageBox + `crash-*.log` with line numbers); `2` = picker-child internal error (parent maps it to fallback); otherwise opencode's own exit code is propagated.
+Exit codes: `0` = ok / picker cancelled / `--clean-host` done / `--has-payload` present; `1` = invalid workspace (incl. drive root), missing binary/config, failed fallback, failed self-test, `--clean` missing dir, `--watch`/`--watch-hop`/`--picker-exe`/`--report-console` misuse, watchdog abort, fatal error (MessageBox + `crash-*.log` with line numbers); `2` = `--pick-folder` child internal error only (the parent auto-falls-back, never exits 2 in a normal run); otherwise opencode's own exit code is propagated.
 
 </details>
 

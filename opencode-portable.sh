@@ -46,12 +46,17 @@ if [ -z "$RUN_TMP" ] || [ ! -d "$RUN_TMP" ]; then
   CLEAN_RUN_TMP=0
 fi
 
-# Sweeper: dead run tmps (crash/kill leftovers). STRICT: only directories whose
-# PID is dead; live PIDs are never touched, whatever their age.
+# Sweeper: dead run tmps (crash/kill leftovers). STRICT: only names matching our
+# exact stamp AND dead PID; anything else (user dirs, garbage) is never touched.
 if [ -d "$TMPROOT" ]; then
   for d in "$TMPROOT"/run-*; do
     [ -d "$d" ] || continue
     base=${d##*/}
+    case "$base" in
+      run-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-[0-9]*-[0-9]*)
+        ;;
+      *) continue ;;
+    esac
     pid=$(echo "$base" | awk -F- '{print $4}')
     alive=0
     case "$pid" in ''|*[!0-9]*) ;; *) kill -0 "$pid" 2>/dev/null && alive=1 ;; esac

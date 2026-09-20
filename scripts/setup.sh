@@ -97,7 +97,8 @@ if [ -z "$found" ]; then
   echo "[setup] ERROR: no opencode binary found in archive" >&2
   exit 1
 fi
-cp -f "$found" "$BIN_DIR/opencode"
+cp -f "$found" "$BIN_DIR/opencode.new"
+mv -f "$BIN_DIR/opencode.new" "$BIN_DIR/opencode"
 chmod +x "$BIN_DIR/opencode"
 echo "[setup] OK -> $BIN_DIR/opencode"
 "$BIN_DIR/opencode" --version || true

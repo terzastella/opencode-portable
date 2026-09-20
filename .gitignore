@@ -13,8 +13,15 @@ bin/*
 .env.*
 *.key
 *.pem
+*.p12
+*.pfx
+id_rsa*
+secrets.json
 .DS_Store
 Thumbs.db
 Desktop.ini
 .vs/
 .vscode/
+*.tmp
+*.bak
+*~

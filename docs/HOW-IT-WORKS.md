@@ -16,9 +16,13 @@ next to the exe**. Double-click flow:
    drag-and-drop console input (3 attempts, quotes stripped, UTF-8, `\\?\`
    normalized). `--workspace <dir>` skips the picker, `--console` goes straight
    to drag-and-drop, `--picker-exe <path>` overrides the child (diagnostics).
-   Cancel exits silently with code 0. Exit codes: `0` ok/cancel, `1` invalid
-   workspace, missing binary/config, failed fallback or fatal (MessageBox +
-   `crash-*.log`), otherwise opencode's own code is propagated.
+   Cancel exits silently with code 0. Self-test (`--self-test`) never shows
+   the dialog. Exit codes: `0` ok/cancel/`--clean-host`/`--has-payload`;
+   `1` invalid workspace (incl. drive root), missing binary/config, failed
+   fallback/self-test, `--clean` missing dir, `--watch`/`--watch-hop`/`--picker-exe`
+   misuse, watchdog abort, fatal (MessageBox + `crash-*.log`); `2` only for a
+   direct `--pick-folder` child error (parent auto-falls-back); otherwise
+   opencode's own code is propagated.
 2. **Portable root** — everything lives inside the selected workspace under
    a per-run `.opencode-portable-<timestamp>-<pid>-<rand>/` folder (config,
    data, cache, state, tmp, `bin/opencode.exe`). Deletion is best-effort with
@@ -40,8 +44,8 @@ next to the exe**. Double-click flow:
    `<stamp-root>/bin/opencode.exe` (fresh every run, ~172 MB — re-extraction
    cost per launch; staged via the workspace tmp, never host TEMP). No network
    at runtime, ever. Without an embedded payload the exe errors out explicitly
-   instead of downloading. A dev `root/bin/opencode.exe` next to the sources
-   is used when present.
+   instead of downloading. A dev run (`dotnet run`) falls back to
+   `BaseDirectory`-relative `bin/opencode.exe` when no payload is embedded.
 5. **Isolated run** — XDG redirect into the per-run root
    (`XDG_*` → `<root>/{config,data,cache,state}`, `OPENCODE_CONFIG` →
    `<root>/config/opencode.json`, `TMP/TEMP/TMPDIR` → `<root>/tmp` directly —
@@ -59,8 +63,8 @@ Config, data, cache and logs stay inside `./data` next to the scripts.
 |---|---|
 | Isolation | Set `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME` to `data/...`, and `OPENCODE_CONFIG` to the local `opencode.json` (auto-created from `config/opencode.example.json`) |
 | Fast startup | Set `OPENCODE_DISABLE_MODELS_FETCH=1` (skips the blocking 10–30s `models.dev` fetch) |
-| Temp | Per-launcher naming differs: `run-HHMMSScc-RAND` (cmd, locale-sanitized), `run-yyyyMMdd-HHmmss-PID-rand` (ps1), `mktemp run-YYYYMMDD-HHMMSS-PID-XXXXXX` (sh). Sweepers: exe/ps1 strict (dead PID + exact stamp only, live never touched), sh same via `kill -0`, cmd age >7 days only (no PID check — documented divergence) |
-| Crash leftovers | Swept next run (strict) or via `--clean <workspace>`; close handler renames to `-trash` first |
+| Temp | Per-launcher naming differs: `run-HHMMSScc-RAND` (cmd, locale-sanitized), `run-yyyyMMdd-HHmmss-PID-rand` (ps1), `mktemp run-YYYYMMDD-HHMMSS-PID-XXXXXX` (sh). Sweepers: exe/ps1 strict (dead PID + exact stamp only, live never touched), sh PID-liveness without stamp regex, cmd age >7 days only (no PID check — documented divergences) |
+| Crash leftovers | Swept next run (strict) or via `--clean <workspace>` |
 | Host pollution guard | Snapshot `%TEMP%\opencode`, `%LOCALAPPDATA%\opencode`, `%APPDATA%\opencode`, `%USERPROFILE%\.config\opencode`, `%USERPROFILE%\.local\share\opencode` (Win; exe only — mirrors cover TEMP/LOCALAPPDATA/APPDATA) or `~/.config|~/.local/share|~/.cache/opencode` (Unix) and remove them on exit **only if this run created them** |
 | Env hygiene | `.ps1`/`.sh` restore or scope env vars (`try/finally`, `trap`); exe passes env to the child only (no shell pollution); concurrent instances are safe |
 | Binary | `bin/` or fail-closed error (PATH reuse needs `--from-path` / env opt-in, resolved path always printed) |
