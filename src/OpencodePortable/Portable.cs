@@ -230,6 +230,16 @@ internal static class PortableRun
     }
 
     /// <summary>
+    /// Host-guard cleanup: never follow reparse points (a planted link must
+    /// not turn the guard into deletion elsewhere).
+    /// </summary>
+    private static void DeletePath(string path)
+    {
+        try { DeleteTreeNoFollow(path); }
+        catch { }
+    }
+
+    /// <summary>
     /// Watchdog entry (--watch pid startTicks dir): waits for the parent
     /// process to die FOR ANY REASON (exit, crash, X-close, Task Manager kill)
     /// then deletes the per-run root. Survives console close via the ignore
@@ -1137,11 +1147,97 @@ internal static class PortableRun
         }
     }
 
-    private static void DeletePath(string path)
+    /// <summary>
+    /// Test hook (--test-junction): plants a directory JUNCTION (no privilege
+    /// needed, unlike symlinks) inside a fake per-run root pointing at a
+    /// "victim" dir with a sentinel file, then runs the real cleanup.
+    /// Asserts: the link is gone AND the victim (sentinel) is intact — cleanup
+    /// must never follow links into user data.
+    /// </summary>
+    public static int TestJunction()
     {
-        // Host-guard cleanup: never follow reparse points (a planted link must
-        // not turn the guard into deletion elsewhere).
-        try { DeleteTreeNoFollow(path); }
-        catch { }
+        string baseDir = Path.Combine(Path.GetTempPath(),
+            "opencode-testjunction-" + Guid.NewGuid().ToString("N"));
+        string data = Path.Combine(baseDir, ".opencode-portable-20200101-000000-99999999-5");
+        string victim = Path.Combine(baseDir, "victim-outside");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(data, "tmp"));
+            Directory.CreateDirectory(victim);
+            File.WriteAllText(Path.Combine(victim, "sentinel.txt"), "do-not-touch");
+            var mk = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = "/c mklink /J \"" + Path.Combine(data, "tmp", "evil-link") + "\" \"" + victim + "\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            using (var p = Process.Start(mk)) p?.WaitForExit(10000);
+            if (!IsReparsePoint(Path.Combine(data, "tmp", "evil-link")))
+            {
+                Console.Error.WriteLine("[test-junction] ERRORE: junction non creata (mklink fallito).");
+                return 1;
+            }
+            var left = RobustDelete(data, 10000);
+            bool linkGone = !Directory.Exists(Path.Combine(data, "tmp", "evil-link")) && !Directory.Exists(data);
+            bool victimOk = File.Exists(Path.Combine(victim, "sentinel.txt"));
+            Console.WriteLine($"[test-junction] linkGone={linkGone} victimOk={victimOk} leftovers={left.Count}");
+            bool ok = linkGone && victimOk;
+            Console.WriteLine(ok ? "[test-junction] OK" : "[test-junction] FALLITO");
+            return ok ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[test-junction] ERRORE: {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(baseDir, recursive: true); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Test hook (--test-midrun-delete): starts a real Execute() run with a
+    /// sleeping child, deletes the per-run root from another thread mid-run,
+    /// and asserts Execute finishes gracefully (exit code set, no hang, no
+    /// unhandled exception) with user files intact.
+    /// </summary>
+    public static int TestMidrunDelete()
+    {
+        string baseDir = Path.Combine(Path.GetTempPath(),
+            "opencode-testmidrun-" + Guid.NewGuid().ToString("N"));
+        string ws = Path.Combine(baseDir, "ws");
+        try
+        {
+            Directory.CreateDirectory(ws);
+            File.WriteAllText(Path.Combine(ws, "mieifile.txt"), "x");
+            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Environment.ProcessId + "-424242";
+            string data = Path.Combine(ws, ".opencode-portable-" + stamp);
+            foreach (string d in new[] { "config", "data", "cache", "state", "tmp", "bin" })
+                Directory.CreateDirectory(Path.Combine(data, d));
+            string cfg = Path.Combine(data, "config", "opencode.json");
+            File.WriteAllText(cfg, "{}");
+            var task = Task.Run(() => Execute(data, cfg, ws, "cmd.exe",
+                new List<string> { "/c", "timeout", "/t", "30", "/nobreak" }));
+            Thread.Sleep(2000); // let the run start the child inside its root
+            try { Directory.Delete(data, recursive: true); } catch { }
+            bool done = task.Wait(60000);
+            int rc = done ? task.Result : -1;
+            bool userOk = File.Exists(Path.Combine(ws, "mieifile.txt"));
+            Console.WriteLine($"[test-midrun-delete] done={done} rc={rc} userOk={userOk}");
+            bool ok = done && userOk;
+            Console.WriteLine(ok ? "[test-midrun-delete] OK" : "[test-midrun-delete] FALLITO");
+            return ok ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[test-midrun-delete] ERRORE: {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(baseDir, recursive: true); } catch { }
+        }
     }
 }

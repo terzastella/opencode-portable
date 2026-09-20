@@ -370,6 +370,14 @@ internal static class Program
             {
                 return PortableRun.TestDetached();
             }
+            if (args[i] == "--test-junction")
+            {
+                return PortableRun.TestJunction();
+            }
+            if (args[i] == "--test-midrun-delete")
+            {
+                return PortableRun.TestMidrunDelete();
+            }
             if (args[i] == "--has-payload")
             {
                 // Prints embedded payload info for build verification (used by
