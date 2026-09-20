@@ -1,6 +1,6 @@
 # Opencode Portable - runtime locale, non committare
 data/
-dist/
+dist*/
 src/**/bin/
 src/**/obj/
 src/**/payload/

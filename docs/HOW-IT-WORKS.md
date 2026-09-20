@@ -70,7 +70,7 @@ Config, data, cache and logs stay inside `./data` next to the scripts.
 `bin/`, `data/`, `dist/`, `src/**/payload|bin|obj` and local `config/opencode.json` are git-ignored. The repo ships **source only**:
 
 - `scripts/setup.*` → download the upstream binary into `bin/` (script flow; honors `GITHUB_TOKEN`, fails fast on unsupported OS/arch)
-- `scripts/publish-fat.ps1` → resolves latest upstream (`-Version/-Arch`, RID matched), embeds the zip, publishes the all-in-one exe into `dist/` (never committed: ~137 MiB / ~144 MB), verifies via `--has-payload`
+- `scripts/publish-fat.ps1` → uses the pinned version from `UPSTREAM_VERSION` (explicit `-Version/-Arch` win, RID matched), embeds the zip, publishes the all-in-one exe into `dist/` (never committed: ~137 MiB / ~144 MB), verifies via `--has-payload`
 - `scripts/pack-release.ps1` → `opencode-portable-win-x64.zip`; `scripts/pack-release.sh` → `opencode-portable-linux-macos.tar.gz`. Both secret-scan and never include `data/`, `bin/*`, `dist/` or local configs.
 
 ## Auth note

@@ -33,17 +33,26 @@ if ($Arch -eq "") {
 $Rid = "win-$Arch"
 
 $Repo = 'anomalyco/opencode'
+$PinnedFile = Join-Path $Root 'UPSTREAM_VERSION'
 if ($Version -eq "" -or $Version -eq "latest") {
-  Step "resolving latest release..."
-  $headers = @{}
-  if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)" }
-  $rel = $null
-  for ($i = 1; $i -le 3 -and $null -eq $rel; $i++) {
-    try { $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers $headers -TimeoutSec 60 }
-    catch { if ($i -eq 3) { throw }; Step "API retry $i/3..."; Start-Sleep 5 }
+  # Pinned by default: reproducible releases. An explicit -Version always wins.
+  $pinned = ""
+  if (Test-Path -LiteralPath $PinnedFile) { $pinned = (Get-Content -LiteralPath $PinnedFile -Raw).Trim() }
+  if ($pinned -match '^\d+\.\d+\.\d+$') {
+    $Version = $pinned
+    Step "using pinned upstream v$Version (from UPSTREAM_VERSION; -Version overrides)."
+  } else {
+    Step "resolving latest release (no valid UPSTREAM_VERSION pin)..."
+    $headers = @{}
+    if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)" }
+    $rel = $null
+    for ($i = 1; $i -le 3 -and $null -eq $rel; $i++) {
+      try { $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers $headers -TimeoutSec 60 }
+      catch { if ($i -eq 3) { throw }; Step "API retry $i/3..."; Start-Sleep 5 }
+    }
+    $Version = ([string]$rel.tag_name).TrimStart('v')
+    if ($Version -eq "") { throw "could not resolve latest version." }
   }
-  $Version = ([string]$rel.tag_name).TrimStart('v')
-  if ($Version -eq "") { throw "could not resolve latest version." }
 } else {
   $Version = $Version.TrimStart('v')
 }

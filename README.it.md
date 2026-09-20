@@ -15,6 +15,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-blue" alt="Windows 10 | 11">
   <a href="https://github.com/terzastella/opencode-portable/releases"><img src="https://img.shields.io/github/v/release/terzastella/opencode-portable" alt="Release"></a>
+  <a href="https://github.com/terzastella/opencode-portable/actions"><img src="https://github.com/terzastella/opencode-portable/actions/workflows/build.yml/badge.svg" alt="CI build"></a>
 </p>
 
 > Pensato per i modelli gratuiti integrati di opencode — niente login, niente
@@ -206,7 +207,8 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 - **Gli zip scaricati hanno il Mark-of-the-Web**: su altri PC Windows può bloccare i launcher `.ps1` (execution policy). Usa `opencode-portable.cmd`, o `Unblock-File`, dopo aver ispezionato il contenuto.
 - Questo wrapper isola i file, **non fa sandbox** di opencode: un AI coding agent esegue comandi shell nel tuo workspace — controlla cosa fa, come con qualsiasi installazione upstream.
 - **Modello di trust**: il workspace NON è un confine di sicurezza — usa solo cartelle fidate (niente share di rete, cartelle sincronizzate scrivibili da altri, o repo non attendibili); chi può scrivere il workspace può influenzare config, cache e binari estratti. Stesso discorso per `--from-path` / `OPENCODE_ALLOW_PATH_FALLBACK=1`: bypassa il trust del payload incorporato ed esegue il primo `opencode` nel PATH — il percorso viene sempre stampato, verificane l'hash se hai dubbi.
-- **Aggiornamenti**: nessun auto-update (`autoupdate: false`); ogni release fissa la sua versione di opencode al build (`publish-fat` risolve latest lì, incorpora + hash). Per aggiornare, scarica la nuova release.
+- **Aggiornamenti**: nessun auto-update (`autoupdate: false`); ogni release fissa la sua versione di opencode nel file `UPSTREAM_VERSION` al build (`publish-fat` lo usa salvo `-Version` esplicita, poi incorpora + hash). Per aggiornare, cambia il file e scarica la nuova release.
+- **CI**: ogni push/PR compila su Windows e lancia la suite di self-test (badge stato qui sotto).
 - **Niente Windows Error Reporting**: l'exe silenzia il WER per i propri crash (compresi gli AV supervisionati del picker) così nulla finisce in `ReportArchive`; la diagnostica resta nei nostri `crash-*.log`. `--clean-host` rimuove le nostre tracce host-side (vecchi archivi WER, telemetria watchdog, dir crash TEMP) — per i preesistenti può servire admin.
 
 </details>
