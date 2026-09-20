@@ -210,6 +210,7 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 - **Aggiornamenti**: nessun auto-update (`autoupdate: false`); ogni release fissa la sua versione di opencode nel file `UPSTREAM_VERSION` al build (`publish-fat` lo usa salvo `-Version` esplicita, poi incorpora + hash). Per aggiornare, cambia il file e scarica la nuova release.
 - **CI**: ogni push/PR compila su Windows e lancia la suite di self-test (badge stato qui sotto).
 - **Niente Windows Error Reporting**: l'exe silenzia il WER per i propri crash (compresi gli AV supervisionati del picker) così nulla finisce in `ReportArchive`; la diagnostica resta nei nostri `crash-*.log`. `--clean-host` rimuove le nostre tracce host-side (vecchi archivi WER, telemetria watchdog, dir crash TEMP) — per i preesistenti può servire admin.
+- **Limiti di "zero tracce"**: rimuove i file applicativi e gli artefatti runtime noti (verificabile con la checklist sotto). **Non** è anti-tracciamento forense: telemetria OS/sicurezza fuori dal nostro controllo (Prefetch, Defender/SmartScreen, USN Journal, pagefile, cronologia shell, log antivirus) non è rimovibile da nessuna app portable.
 
 </details>
 
