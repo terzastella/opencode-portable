@@ -57,3 +57,41 @@ jobs:
           $v = (Get-Content -LiteralPath UPSTREAM_VERSION -Raw).Trim()
           if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "UPSTREAM_VERSION malformed: $v" }
           Write-Host "pinned upstream: $v"
+
+  # Full release-path verification, tags only (slow: downloads ~58MB payload).
+  # Fast smoke job above stays green on every push; this proves publish-fat,
+  # payload embed + hash assert, extraction and a real run end to end.
+  build-fat:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish fat (pinned version, embedded payload)
+        shell: pwsh
+        run: |
+          $v = (Get-Content -LiteralPath UPSTREAM_VERSION -Raw).Trim()
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/publish-fat.ps1 -Version $v
+
+      - name: Payload assert + smoke run
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = 'dist/OpencodePortable.exe'
+          & $exe --has-payload
+          if ($LASTEXITCODE -ne 0) { throw 'has-payload failed' }
+          & $exe --self-test
+          if ($LASTEXITCODE -ne 0) { throw 'self-test failed' }
+          $ws = Join-Path $env:RUNNER_TEMP 'ci-ws'
+          New-Item -ItemType Directory -Path $ws -Force | Out-Null
+          Set-Content (Join-Path $ws 'probe.txt') 'ci'
+          & $exe --workspace $ws -- --version
+          if ($LASTEXITCODE -ne 0) { throw 'fat smoke run failed' }
+          $left = Get-ChildItem -LiteralPath $ws -Force | Where-Object { $_.Name -ne 'probe.txt' }
+          if ($left) { throw ("workspace not clean: " + ($left.Name -join ', ')) }
+          Write-Host 'fat pipeline OK.'

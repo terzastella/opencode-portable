@@ -202,7 +202,7 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 <details>
 <summary><b>Note di sicurezza</b></summary>
 
-- **I binari sono artefatti upstream fidati**: `setup.*` scarica e `publish-fat.ps1` incorpora via HTTPS dalle GitHub releases, senza checksum. Se upstream pubblicherà hash/firme, verificali prima di eseguire.
+- **I binari sono artefatti upstream fidati**: `setup.*` scarica e `publish-fat.ps1` incorpora via HTTPS dalle GitHub releases. L'hash SHA-256 del payload è incorporato al build e riverificato a ogni estrazione; manca solo l'anchor indipendente (upstream non pubblica checksum/firme — se lo farà, li verificheremo).
 - **Le credenziali stanno in `data/` (script) o `<workspace>/.opencode-portable-*/` (exe)** (token auth, API key): non condividere né pubblicare quelle cartelle, e non distribuire archivi che le contengono — `pack-release` le esclude di proposito. Chiavetta persa = credenziali perse.
 - **Gli zip scaricati hanno il Mark-of-the-Web**: su altri PC Windows può bloccare i launcher `.ps1` (execution policy). Usa `opencode-portable.cmd`, o `Unblock-File`, dopo aver ispezionato il contenuto.
 - Questo wrapper isola i file, **non fa sandbox** di opencode: un AI coding agent esegue comandi shell nel tuo workspace — controlla cosa fa, come con qualsiasi installazione upstream.
