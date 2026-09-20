@@ -8,7 +8,7 @@
     <AssemblyName>OpencodePortable</AssemblyName>
     <!-- Single source of truth for the app version: bump per release, keep in
          sync with the GitHub tag (vX.Y) and CHANGELOG. -->
-    <Version>1.3.2</Version>
+    <Version>1.3.4</Version>
     <ApplicationIcon>..\..\assets\opencode-portable.ico</ApplicationIcon>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
