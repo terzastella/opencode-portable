@@ -1,0 +1,16 @@
+# Dependabot version updates for opencode-portable:
+# only GitHub Actions (no npm/NuGet manifests in this repo).
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Rome"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps"
