@@ -4,7 +4,7 @@
 
 <h1 align="center">Opencode Portable</h1>
 
-<p align="center">Run <a href="https://github.com/anomalyco/opencode">opencode</a> as a truly portable app on <b>Windows 10 / 11</b>: double-click, pick a folder, work.<br>Close it — quit, X, Ctrl+C, even Task Manager kill — and <b>zero traces remain</b>.</p>
+<p align="center">Run <a href="https://github.com/anomalyco/opencode">opencode</a> as a truly portable app on <b>Windows 10 / 11</b>: double-click, pick a folder, work.<br>Close it — quit, X, Ctrl+C, even Task Manager kill — and the app removes its own files (verified with the checklist below; <a href="#verify-zero-traces">scope note on OS telemetry</a>).</p>
 
 <p align="center">
   <a href="README.md"><img src="https://img.shields.io/badge/English-selected-blue" alt="English"></a>
@@ -23,7 +23,7 @@
 > tested** with this project: API keys are accepted per session but provider
 > setups are unverified.
 >
-> Tested with opencode `1.18.31` (snapshot version; setup scripts default to latest upstream).
+> Tested with opencode `1.18.31` (snapshot version; setup scripts default to the pinned `UPSTREAM_VERSION`).
 
 ## Download
 
@@ -31,6 +31,13 @@ No install, no setup: grab **`OpencodePortable.exe`** from the
 [latest release](https://github.com/terzastella/opencode-portable/releases),
 put it anywhere (Desktop, USB stick), double-click it. That's the whole
 installation.
+
+Verify the download against the published `.sha256` (attached next to the
+exe in every release):
+
+```powershell
+if ((Get-FileHash OpencodePortable.exe -Algorithm SHA256).Hash.ToLower() -ne (Get-Content OpencodePortable.exe.sha256)) { throw 'hash mismatch' }
+```
 
 ## Quickstart
 
