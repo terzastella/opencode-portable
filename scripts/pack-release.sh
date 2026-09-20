@@ -36,7 +36,7 @@ fi
 echo "[pack] scan clean."
 
 TARBALL="$OUT_DIR/opencode-portable-linux-macos.tar.gz"
-stage="$(mktemp -d)"
-trap 'rm -rf "$stage"' EXIT
+# Pack straight from the scanned INCLUDE list (no staging dir: nothing unpacked
+# can slip in unscanned between scan and archive).
 (cd "$ROOT" && tar -czf "$TARBALL" "${INCLUDE[@]}")
 echo "[pack] OK -> $TARBALL"

@@ -40,11 +40,13 @@ internal static class Program
             try
             {
                 // Prefer the workspace-local state dir; host TEMP only if we crash
-                // before any workspace is known. Never next to the exe.
+                // before any workspace is known. Unique per incident (never a
+                // shared global dir two runs could fight over). Never next to exe.
                 // NOTE: forwarded opencode args are NEVER logged (they may carry
                 // secrets); only the launcher-owned flag count.
                 int ownedCount = args.Count(a => a.StartsWith("--"));
-                string logDir = s_crashDir ?? Path.Combine(Path.GetTempPath(), "opencode-portable");
+                string logDir = s_crashDir ?? Path.Combine(Path.GetTempPath(),
+                    "opencode-portable-crash-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(logDir);
                 // Privacy: scrub the username from paths; keep only the last 5 logs.
                 string profile = Environment.GetEnvironmentVariable("USERPROFILE") ?? "";
@@ -597,8 +599,11 @@ internal static class Program
         catch { skipped++; }
         try
         {
-            string crashDir = Path.Combine(tmp, "opencode-portable");
-            if (Directory.Exists(crashDir)) candidates.Add(crashDir);
+            // Current per-incident dirs plus the legacy fixed name, if any.
+            foreach (string d in Directory.GetDirectories(tmp, "opencode-portable-crash-*"))
+                candidates.Add(d);
+            string legacy = Path.Combine(tmp, "opencode-portable");
+            if (Directory.Exists(legacy)) candidates.Add(legacy);
         }
         catch { skipped++; }
         foreach (string p in candidates)
