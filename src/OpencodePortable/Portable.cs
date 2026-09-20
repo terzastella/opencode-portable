@@ -136,7 +136,9 @@ internal static class PortableRun
 
         // Snapshot of host locations BEFORE redirect (guard). Covers XDG-style
         // fallbacks too (USERPROFILE/.config, .local/share) in case something
-        // ignores the redirected env vars.
+        // ignores the redirected env vars. runStart narrows the delete race:
+        // only paths created after run start are ever removed.
+        DateTime runStart = DateTime.Now;
         var sysTargets = new List<(string Path, bool Existed)>();
         string? userProfile = Environment.GetEnvironmentVariable("USERPROFILE");
         var bases = new List<string?>();
@@ -211,8 +213,15 @@ internal static class PortableRun
             {
                 try
                 {
-                    if (!existed && (Directory.Exists(path) || File.Exists(path)))
-                        DeletePath(path);
+                    // Delete only paths born during THIS run: must not have existed
+                    // at snapshot AND must have been created after run start (a
+                    // foreign process could have created the same path mid-run).
+                    if (existed || (!Directory.Exists(path) && !File.Exists(path))) continue;
+                    DateTime created;
+                    try { created = Directory.Exists(path) ? Directory.GetCreationTime(path) : File.GetCreationTime(path); }
+                    catch { continue; }
+                    if (created < runStart.AddMinutes(-1)) continue;
+                    DeletePath(path);
                 }
                 catch { }
             }
@@ -228,14 +237,24 @@ internal static class PortableRun
     /// </summary>
     public static int WatchdogRoot(int parentPid, long parentStartTicks, string dir)
     {
-        // Diagnostic telemetry: tiny log in host TEMP with a random suffix
-        // (unpredictable name), removed on success and left behind as evidence
-        // on failure (a silent watchdog is undebuggable).
+        // Diagnostic telemetry: buffered in memory, written to host TEMP ONLY on
+        // failure/abort/leftovers (a silent watchdog is undebuggable, but a
+        // successful run must leave zero host traces). Random suffix, capped.
         string telePath = Path.Combine(Path.GetTempPath(),
             $"opencode-portable-watchdog-{parentPid}-{Random.Shared.Next(1000000)}.log");
+        var teleBuf = new List<string>();
         void Tele(string msg)
         {
-            try { File.AppendAllText(telePath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\n"); } catch { }
+            try
+            {
+                if (teleBuf.Count < 50)
+                    teleBuf.Add($"[{DateTime.Now:HH:mm:ss.fff}] {msg}");
+            }
+            catch { }
+        }
+        void FlushTele()
+        {
+            try { File.WriteAllLines(telePath, teleBuf); } catch { }
         }
         try
         {
@@ -247,6 +266,7 @@ internal static class PortableRun
             {
                 Tele("abort: dir non valida");
                 WEcho("[watchdog] ERRORE: dir non valida, niente da cancellare: " + dir);
+                FlushTele();
                 try { SelfDeleteCopy(); } catch { }
                 return 1;
             }
@@ -287,6 +307,7 @@ internal static class PortableRun
                     {
                         Tele("abort: identità cambiata tra i due controlli");
                         WEcho("[watchdog] ERRORE: identità padre cambiata, annullo.");
+                        FlushTele();
                         try { SelfDeleteCopy(); } catch { }
                         return 1;
                     }
@@ -299,6 +320,7 @@ internal static class PortableRun
                 // Identity uncertain (ticks==0 or recycled PID): do NOT delete.
                 Tele("abort: identità non verificabile");
                 WEcho("[watchdog] ERRORE: identità padre non verificabile, annullo.");
+                FlushTele();
                 try { SelfDeleteCopy(); } catch { }
                 return 1;
             }
@@ -333,17 +355,19 @@ internal static class PortableRun
             {
                 Tele("resti: " + string.Join(", ", left.Take(10)));
                 WEcho("[watchdog] ATTENZIONE resti: " + string.Join(", ", left.Take(10)));
-            }
-            else
-            {
-                try { if (File.Exists(telePath)) File.Delete(telePath); } catch { }
+                FlushTele();
             }
             SelfDeleteCopy(); // copies remove themselves; originals never reach here as copies
             return 0;
         }
         catch (Exception ex)
         {
-            try { File.AppendAllText(telePath, "FATAL: " + ex + "\n"); } catch { }
+            try
+            {
+                teleBuf.Add("FATAL: " + ex);
+                FlushTele();
+            }
+            catch { }
             WEcho("[watchdog] ERRORE: " + ex.Message);
             try { SelfDeleteCopy(); } catch { }
             return 1;
@@ -970,9 +994,10 @@ internal static class PortableRun
 
     /// <summary>
     /// Self-deletes the running copy (only when this image IS an opwatch copy):
-    /// a running exe cannot delete itself, so a short-lived PowerShell removes
-    /// it after we exit. The path goes in SINGLE quotes (no $ expansion) with
-    /// doubling for safety; -LiteralPath takes no wildcards.
+    /// a running exe cannot delete itself, so a short-lived shell removes it
+    /// after we exit. Absolute system powershell (no PATH lookup, no hijack);
+    /// Start-Sleep (NOT cmd timeout, which fails instantly without a console).
+    /// Path in single quotes with doubling (no $ expansion, no wildcards).
     /// </summary>
     internal static void SelfDeleteCopy()
     {
@@ -981,10 +1006,14 @@ internal static class PortableRun
             string self = Environment.ProcessPath ?? "";
             if (!Path.GetFileName(self).StartsWith("opwatch-", StringComparison.OrdinalIgnoreCase))
                 return;
+            string shell = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System),
+                "WindowsPowerShell", "v1.0", "powershell.exe");
+            if (!File.Exists(shell)) return; // no shell, no self-delete (sweeper covers)
             string quoted = "'" + self.Replace("'", "''") + "'";
             var psi = new ProcessStartInfo
             {
-                FileName = "powershell.exe",
+                FileName = shell,
                 UseShellExecute = false,
                 CreateNoWindow = true,
             };

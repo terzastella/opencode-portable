@@ -178,6 +178,8 @@ For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pa
 - **Credentials live in `data/` (scripts) or `<workspace>/.opencode-portable-*/` (exe)** (auth tokens, API keys): never share or publish those folders, and never ship an archive containing them — `pack-release` excludes them by design. A lost USB stick means lost credentials.
 - **Downloaded zips carry Mark-of-the-Web**: on other PCs Windows may block the `.ps1` launchers (execution policy). Use `opencode-portable.cmd`, or `Unblock-File`, after inspecting the content.
 - This wrapper isolates files, it does **not sandbox** opencode itself: an AI coding agent runs shell commands in your workspace — review what it does, as with any upstream install.
+- **Trust model**: the workspace is NOT a security boundary — use only folders you trust (no network shares, synced folders writable by others, or untrusted repos); anyone who can write the workspace can influence config, cache and extracted binaries. Same for `--from-path` / `OPENCODE_ALLOW_PATH_FALLBACK=1`: it bypasses the bundled-payload trust and runs whatever `opencode` is first in PATH — resolved path is always printed, hash it yourself if unsure.
+- **Updates**: no auto-update (`autoupdate: false`); each release pins its opencode version at build time (`publish-fat` resolves latest then, embeds + hashes it). To update, download the new release.
 - **No Windows Error Reporting**: the exe silences WER for its own crashes (including supervised picker-child AVs) so nothing lands in `ReportArchive`; diagnostics stay in our own `crash-*.log`. `--clean-host` removes our host-side traces (old WER archives, watchdog telemetry leftovers, TEMP crash dir) — pre-existing archives may need admin.
 
 ## Exe flags & exit codes

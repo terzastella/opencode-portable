@@ -46,9 +46,17 @@ internal static class Program
                 int ownedCount = args.Count(a => a.StartsWith("--"));
                 string logDir = s_crashDir ?? Path.Combine(Path.GetTempPath(), "opencode-portable");
                 Directory.CreateDirectory(logDir);
+                // Privacy: scrub the username from paths; keep only the last 5 logs.
+                string profile = Environment.GetEnvironmentVariable("USERPROFILE") ?? "";
+                if (!string.IsNullOrEmpty(profile)) stack = stack.Replace(profile, "~", StringComparison.OrdinalIgnoreCase);
                 File.WriteAllText(
                     Path.Combine(logDir, $"crash-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Environment.ProcessId}.log"),
                     $"[{DateTime.Now:O}] {stack}\nLauncherFlags: {ownedCount}\n");
+                foreach (string old in Directory.GetFiles(logDir, "crash-*.log")
+                    .OrderByDescending(f => f).Skip(5))
+                {
+                    try { File.Delete(old); } catch { }
+                }
             }
             catch { }
             try { MessageBoxW(IntPtr.Zero, msg, "Opencode Portable", 0x10); }
@@ -135,9 +143,13 @@ internal static class Program
         {
             using var proc = Process.Start(psi);
             if (proc is null) return (PickOutcome.Fallback, null);
+            // Async pipe drains BEFORE wait: a chatty child must never block on
+            // full stdout/stderr buffers while we block on its exit (deadlock).
+            var outTask = proc.StandardOutput.ReadToEndAsync();
+            var errTask = proc.StandardError.ReadToEndAsync();
             proc.WaitForExit(); // modal user dialog: wait indefinitely
-            string stdout = proc.StandardOutput.ReadToEnd();
-            string stderr = proc.StandardError.ReadToEnd();
+            string stdout = outTask.GetAwaiter().GetResult();
+            string stderr = errTask.GetAwaiter().GetResult();
             foreach (string line in stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 Console.Error.WriteLine("[picker] " + line);
             if (proc.ExitCode == unchecked((int)0xC0000005))
@@ -324,10 +336,6 @@ internal static class Program
             if (args[i] == "--test-watchdog-copy")
             {
                 return PortableRun.TestWatchdogCopy();
-            }
-            if (args[i] == "--test-watchdog-hop")
-            {
-                return PortableRun.TestWatchdogHop();
             }
             if (args[i] == "--watch-hop")
             {
@@ -625,12 +633,48 @@ internal static class Program
         string? found = FindBundled(root, data);
         if (found is not null) return found;
         // First run: extract the payload embedded at BUILD time (no network, ever).
+        // The expected SHA-256 travels in a second embedded resource: verify it
+        // BEFORE extracting anything (supply-chain pin without freezing versions,
+        // publish-fat resolves latest at build).
         const string resName = "OpencodePortable.payload.opencode.zip";
+        const string hashName = "OpencodePortable.payload.opencode.zip.sha256";
         using Stream? res = Assembly.GetExecutingAssembly().GetManifestResourceStream(resName);
         if (res is null)
         {
             Console.Error.WriteLine("[opencode-portable] ERRORE: payload opencode non incorporato in questo exe.");
             Console.Error.WriteLine("[opencode-portable] Ricompila con scripts\\publish-fat.ps1 (i download a runtime sono disabilitati).");
+            return null;
+        }
+        if (res.Length <= 0 || res.Length > 500L * 1024 * 1024)
+        {
+            Console.Error.WriteLine("[opencode-portable] ERRORE: payload di dimensione sospetta, annullo.");
+            return null;
+        }
+        string expected;
+        using (Stream? hs = Assembly.GetExecutingAssembly().GetManifestResourceStream(hashName))
+        {
+            if (hs is null)
+            {
+                Console.Error.WriteLine("[opencode-portable] ERRORE: hash atteso mancante, annullo (build incompleta).");
+                return null;
+            }
+            using var sr = new StreamReader(hs);
+            expected = (sr.ReadToEnd() ?? "").Trim().ToLowerInvariant();
+        }
+        string actual;
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+        {
+            actual = Convert.ToHexString(sha.ComputeHash(res)).ToLowerInvariant();
+        }
+        if (actual != expected || expected.Length != 64)
+        {
+            Console.Error.WriteLine("[opencode-portable] ERRORE: hash payload non corrispondente, annullo (possibile manomissione).");
+            return null;
+        }
+        try { res.Position = 0; }
+        catch
+        {
+            Console.Error.WriteLine("[opencode-portable] ERRORE: payload non rileggibile, annullo.");
             return null;
         }
         Directory.CreateDirectory(Path.Combine(data, "bin"));
@@ -642,9 +686,17 @@ internal static class Program
             Console.WriteLine("[opencode-portable] primo avvio: estraggo opencode incorporato...");
             using (var fs = File.Create(tmpZip)) res.CopyTo(fs);
             using var zip = ZipFile.OpenRead(tmpZip);
-            var entry = zip.Entries.FirstOrDefault(e =>
-                e.Name.StartsWith("opencode", StringComparison.OrdinalIgnoreCase) &&
-                e.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+            var entries = zip.Entries;
+            if (entries.Count > 50 || entries.Sum(e => e.Length) > 1024L * 1024 * 1024)
+            {
+                Console.Error.WriteLine("[opencode-portable] ERRORE: archivio sospetto (troppe entry o troppo grande), annullo.");
+                return null;
+            }
+            var entry = entries.FirstOrDefault(e =>
+                e.Name.Equals("opencode.exe", StringComparison.OrdinalIgnoreCase))
+                ?? entries.FirstOrDefault(e =>
+                    e.Name.StartsWith("opencode", StringComparison.OrdinalIgnoreCase) &&
+                    e.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
             if (entry is null)
             {
                 Console.Error.WriteLine("[opencode-portable] ERRORE: nessun opencode.exe nel payload incorporato.");

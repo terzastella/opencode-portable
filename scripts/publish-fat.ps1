@@ -78,21 +78,30 @@ try {
   if (-not $downloaded) { throw "download failed after retries." }
   $zipSize = (Get-Item -LiteralPath $PayloadZip).Length
   Step ("payload: {0:N1} MB, verifying integrity..." -f ($zipSize / 1MB))
-  # Integrity gate: a truncated zip must NEVER be embedded. Open it and require
-  # the real binary entry.
-  Add-Type -AssemblyName System.IO.Compression
+  # Integrity gate: a truncated zip must NEVER be embedded. Expand to temp and
+  # require the real binary entry, with sane bounds (zip-bomb defense).
+  # (Expand-Archive instead of raw .NET ZipFile: immune to assembly differences
+  # between PowerShell 5.1/7.)
   $zipOk = $false
+  $gateTmp = Join-Path ([IO.Path]::GetTempPath()) ("opencode-gate-" + [Guid]::NewGuid().ToString('N'))
   try {
-    $zr = [System.IO.Compression.ZipFile]::OpenRead($PayloadZip)
-    try {
-      $hit = $zr.Entries | Where-Object { $_.Name -like 'opencode*.exe' } | Select-Object -First 1
-      if ($hit -and $hit.Length -gt 10MB) { $zipOk = $true }
-      else { Step "integrity FAIL: no opencode*.exe >10MB inside." }
-    } finally { $zr.Dispose() }
+    Expand-Archive -LiteralPath $PayloadZip -DestinationPath $gateTmp -Force
+    $files = @(Get-ChildItem -LiteralPath $gateTmp -Recurse -File -ErrorAction Stop)
+    $hit = $files | Where-Object { $_.Name -eq 'opencode.exe' } | Select-Object -First 1
+    if (-not $hit) { $hit = $files | Where-Object { $_.Name -like 'opencode*.exe' } | Select-Object -First 1 }
+    if ($files.Count -gt 50) { Step ("integrity FAIL: too many entries ({0})." -f $files.Count) }
+    elseif (-not $hit -or $hit.Length -lt 10MB) { Step "integrity FAIL: no opencode*.exe >10MB inside." }
+    else { $zipOk = $true }
   } catch {
     Step ("integrity FAIL: cannot open zip ({0})." -f $_.Exception.Message)
+  } finally {
+    Remove-Item -LiteralPath $gateTmp -Recurse -Force -ErrorAction SilentlyContinue
   }
-  if (-not $zipOk) { throw "payload zip invalid — refusing to embed. Check network and retry." }
+  if (-not $zipOk) { throw "payload zip invalid - refusing to embed. Check network and retry." }
+  # Pin the hash: the launcher verifies it before every extraction (supply-chain
+  # pinning without freezing the version - publish-fat resolves latest at build).
+  $PayloadHash = Join-Path $PayloadDir 'opencode.zip.sha256'
+  (Get-FileHash -LiteralPath $PayloadZip -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content -LiteralPath $PayloadHash -NoNewline
 
   Step "publishing ($Rid)..."
   & dotnet publish (Join-Path $Root 'src\OpencodePortable\OpencodePortable.csproj') -c Release -r $Rid -o $OutDir
@@ -105,9 +114,11 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "payload NOT embedded (see --has-payload output above)." }
   Step ("OK -> {0} ({1:N1} MB, payload v{2} embedded)" -f $exe, ($exeSize / 1MB), $Version)
 } finally {
-  # Remove only what we downloaded; never wipe a pre-existing payload dir.
-  if (Test-Path -LiteralPath $PayloadZip) {
-    Remove-Item -LiteralPath $PayloadZip -Force -ErrorAction SilentlyContinue
-    Step "staging pulita."
+  # Remove only what we downloaded (.zip + .sha256); never wipe a pre-existing payload dir.
+  foreach ($f in @($PayloadZip, (Join-Path $PayloadDir 'opencode.zip.sha256'))) {
+    if (Test-Path -LiteralPath $f) {
+      Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+    }
   }
+  Step "staging pulita."
 }

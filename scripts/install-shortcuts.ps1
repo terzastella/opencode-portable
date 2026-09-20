@@ -45,7 +45,7 @@ foreach ($lnk in $Links) {
   $sc.TargetPath = $Target
   $sc.WorkingDirectory = $Root
   $sc.IconLocation = $Icon
-  $sc.Description = 'Opencode Portable — config, dati e cache restano nella cartella'
+  $sc.Description = 'Opencode Portable - config, dati e cache restano nella cartella'
   $sc.Save()
   Write-Host "[shortcuts] created $lnk"
 }

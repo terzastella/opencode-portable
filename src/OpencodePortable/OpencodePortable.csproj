@@ -27,6 +27,9 @@
     <EmbeddedResource Include="payload\opencode.zip"
                       LogicalName="OpencodePortable.payload.opencode.zip"
                       Condition="Exists('payload\opencode.zip')" />
+    <EmbeddedResource Include="payload\opencode.zip.sha256"
+                      LogicalName="OpencodePortable.payload.opencode.zip.sha256"
+                      Condition="Exists('payload\opencode.zip.sha256')" />
   </ItemGroup>
 
 </Project>

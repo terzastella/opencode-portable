@@ -42,9 +42,15 @@ try {
   $Exe = Get-ChildItem -LiteralPath $Tmp -Filter 'opencode.exe' -Recurse | Select-Object -First 1
   if (-not $Exe) { $Exe = Get-ChildItem -LiteralPath $Tmp -Filter 'opencode*.exe' -Recurse | Select-Object -First 1 }
   if (-not $Exe) { throw "no opencode.exe found in archive" }
-  Copy-Item -LiteralPath $Exe.FullName -Destination (Join-Path $BinDir 'opencode.exe') -Force
-  Write-Host "[setup] OK -> $BinDir\opencode.exe"
-  & (Join-Path $BinDir 'opencode.exe') --version
+  if ($Exe.Length -lt 10MB) { throw "extracted binary suspiciously small, refusing install." }
+  $Final = Join-Path $BinDir 'opencode.exe'
+  # Atomic install: write aside, then move over the final name (same volume),
+  # so an interrupted run never leaves a partial binary behind.
+  $Staging = Join-Path $BinDir 'opencode.exe.new'
+  Copy-Item -LiteralPath $Exe.FullName -Destination $Staging -Force
+  Move-Item -LiteralPath $Staging -Destination $Final -Force
+  Write-Host "[setup] OK -> $Final"
+  & $Final --version
 } finally {
   Remove-Item -LiteralPath $Tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
