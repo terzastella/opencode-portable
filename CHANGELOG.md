@@ -2,6 +2,9 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials only).
 Upstream opencode stays at `1.18.31` (see `UPSTREAM_VERSION`) unless noted.
+Only `v1.3.4` is published (tags `v1.3.1`–`v1.3.3` were removed); older
+entries below are kept as change history. The `[v1.3.4]` section also
+consolidates the untagged `v1.3.3` work.
 
 ## [Unreleased]
 

@@ -63,7 +63,7 @@ Config, data, cache and logs stay inside `./data` next to the scripts.
 |---|---|
 | Isolation | Set `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME` to `data/...`, and `OPENCODE_CONFIG` to the local `opencode.json` (auto-created from `config/opencode.example.json`) |
 | Fast startup | Set `OPENCODE_DISABLE_MODELS_FETCH=1` (skips the blocking 10–30s `models.dev` fetch) |
-| Temp | Per-launcher naming differs: `run-HHMMSScc-RAND` (cmd, locale-sanitized), `run-yyyyMMdd-HHmmss-PID-rand` (ps1), `mktemp run-YYYYMMDD-HHMMSS-PID-XXXXXX` (sh). Sweepers: exe/ps1 strict (dead PID + exact stamp only, live never touched), sh PID-liveness without stamp regex, cmd age >7 days only (no PID check — documented divergences) |
+| Temp | Per-launcher naming differs: `run-HHMMSScc-RAND` (cmd, locale-sanitized), `run-yyyyMMdd-HHmmss-PID-rand` (ps1), `mktemp run-YYYYMMDD-HHMMSS-PID-XXXXXX` (sh). Sweepers: exe/ps1/sh strict (dead PID + exact stamp only, live never touched), cmd age >7 days only (no PID check — documented divergence) |
 | Crash leftovers | Swept next run (strict) or via `--clean <workspace>` |
 | Host pollution guard | Snapshot `%TEMP%\opencode`, `%LOCALAPPDATA%\opencode`, `%APPDATA%\opencode`, `%USERPROFILE%\.config\opencode`, `%USERPROFILE%\.local\share\opencode` (Win; exe only — mirrors cover TEMP/LOCALAPPDATA/APPDATA) or `~/.config|~/.local/share|~/.cache/opencode` (Unix) and remove them on exit **only if this run created them** |
 | Env hygiene | `.ps1`/`.sh` restore or scope env vars (`try/finally`, `trap`); exe passes env to the child only (no shell pollution); concurrent instances are safe |

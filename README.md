@@ -33,7 +33,7 @@ put it anywhere (Desktop, USB stick), double-click it. That's the whole
 installation.
 
 Verify the download against the published `.sha256` (attached next to the
-exe in every release):
+exe in every release, alongside the CycloneDX SBOM `OpencodePortable.exe.cdx.json`):
 
 ```powershell
 if ((Get-FileHash OpencodePortable.exe -Algorithm SHA256).Hash.ToLower() -ne (Get-Content OpencodePortable.exe.sha256)) { throw 'hash mismatch' }
@@ -188,7 +188,7 @@ Shortcuts launch `opencode-portable.cmd` with the custom icon from `assets/openc
 | Isolation | Set `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME` to `data/...`, and `OPENCODE_CONFIG` to `config/opencode.json` |
 | Fast startup | Set `OPENCODE_DISABLE_MODELS_FETCH=1` (skips the blocking 10–30 s `models.dev` fetch) |
 | Temp | Isolated per-run tmp (`TMP/TEMP/TMPDIR` point inside it, deleted on exit). Naming differs per launcher: `run-HHMMSScc-RAND` (cmd, locale-sanitized), `run-yyyyMMdd-HHmmss-PID-rand` (ps1), `mktemp run-YYYYMMDD-HHMMSS-PID-XXX` (sh); the exe needs no sub-level (its root is already per-run) |
-| Crash leftovers | Swept next run (exe + ps1: dead PID + exact stamp only, live never touched; sh: PID-liveness without stamp regex; cmd: age >7 days, no PID check — documented divergences) |
+| Crash leftovers | Swept next run (exe + ps1 + sh: dead PID + exact stamp only, live never touched; cmd: age >7 days, no PID check — documented divergence) |
 | Host pollution guard | Snapshot `%TEMP%\opencode`, `%LOCALAPPDATA%\opencode`, `%APPDATA%\opencode` (Win) or `~/.config/opencode`, `~/.local/share/opencode`, `~/.cache/opencode` (Unix) and remove them on exit **only if this run created them** (exe also covers `%USERPROFILE%\.config\opencode` + `.local\share\opencode`) |
 | Env hygiene | `.ps1`/`.sh` restore or scope env vars (`try/finally`, `trap`); concurrent instances are safe |
 

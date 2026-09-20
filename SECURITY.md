@@ -8,7 +8,7 @@ updates — download the newest `OpencodePortable.exe` from
 
 | Version | Supported |
 |---|---|
-| latest (`v1.3`+) | ✅ |
+| latest (`v1.3.4`) | ✅ |
 | older | ❌ |
 
 ## Scope — what this project is (and is not)
