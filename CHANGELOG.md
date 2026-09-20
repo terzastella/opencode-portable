@@ -41,7 +41,7 @@ Upstream opencode stays at `1.18.31` (see `UPSTREAM_VERSION`) unless noted.
 - CI: actions pinned to SHA, SDK pinned via `global.json`, full-payload `fat`
   job on tags, `THIRD-PARTY-NOTICES.md`.
 
-## [v1.3] — current
+## [v1.3]
 
 - Security test hooks: `--test-junction` (link removed, target intact),
   `--test-midrun-delete` (graceful exit when the root vanishes mid-run).
