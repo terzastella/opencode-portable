@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 10 440 440">
+  <!-- Opencode Portable official logo — folder + prompt (outline, monochrome) -->
+  <!-- SPDX-License-Identifier: MIT -->
+  <!-- folder tab -->
+  <rect x="110" y="140" width="142" height="68" rx="16" fill="none" stroke="#F5F5F5" stroke-width="24"/>
+  <!-- folder body -->
+  <rect x="96" y="185" width="320" height="235" rx="34" fill="#141416" stroke="#F5F5F5" stroke-width="26"/>
+  <!-- prompt ">_" -->
+  <polyline points="200,258 250,308 200,358" fill="none" stroke="#F5F5F5" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="266" y1="350" x2="334" y2="350" stroke="#F5F5F5" stroke-width="30" stroke-linecap="round"/>
+</svg>

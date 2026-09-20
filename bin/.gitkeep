@@ -1,0 +1,3 @@
+# This file keeps the empty bin/ folder tracked in git.
+# Real binaries (opencode.exe / opencode) are downloaded via scripts/setup.*
+# and are ignored by .gitignore. Do not commit large binaries here.

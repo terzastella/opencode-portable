@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>OpencodePortable</AssemblyName>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>..\..\assets\opencode-portable.ico</ApplicationIcon>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- No trimming, ever: it corrupted the COM folder dialog twice. Pinned
+         explicitly so a future edit can't silently re-enable it. Size is
+         explicitly not a concern for this project. -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <!-- Embedded PDBs: crash logs get real line numbers (worth every byte). -->
+    <DebugType>embedded</DebugType>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Upstream payload embedded at BUILD time by scripts/publish-fat.ps1.
+         The repo stays source-only; the zip lives here only during publish. -->
+    <EmbeddedResource Include="payload\opencode.zip"
+                      LogicalName="OpencodePortable.payload.opencode.zip"
+                      Condition="Exists('payload\opencode.zip')" />
+  </ItemGroup>
+
+</Project>
