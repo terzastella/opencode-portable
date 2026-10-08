@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Download the matching upstream opencode binary into ./bin/
-# Usage: ./scripts/setup.sh [--version 1.18.31]
+# Usage: ./scripts/setup.sh [--version 1.18.35]
 # SPDX-License-Identifier: MIT
 set -euo pipefail
 
@@ -11,7 +11,7 @@ mkdir -p "$BIN_DIR"
 VERSION="${1:-}"
 if [ "${1:-}" = "--version" ]; then
   if [ -z "${2:-}" ]; then
-    echo "[setup] ERROR: --version requires a value (e.g. --version 1.18.31)." >&2
+    echo "[setup] ERROR: --version requires a value (e.g. --version 1.18.35)." >&2
     exit 1
   fi
   VERSION="$2"

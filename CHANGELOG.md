@@ -1,7 +1,7 @@
 # Changelog
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials only).
-Upstream opencode stays at `1.18.31` (see `UPSTREAM_VERSION`) unless noted.
+Upstream opencode stays at `1.18.35` (see `UPSTREAM_VERSION`) unless noted.
 Only `v1.3.4` is published (tags `v1.3.1`–`v1.3.3` were removed); older
 entries below are kept as change history. The `[v1.3.4]` section also
 consolidates the untagged `v1.3.3` work.
@@ -9,6 +9,9 @@ consolidates the untagged `v1.3.3` work.
 ## [Unreleased]
 
 ## [v1.3.4]
+
+- Upstream bump: opencode `1.18.31` → `1.18.35` (payload re-embedded, SHA-256
+  hash and SBOM regenerated, full test matrix re-run green).
 
 - Test hooks: `--test-race` (junction swap mid-delete, victim target always
   survives) and `--test-longpath` (deep nested paths via `RobustDelete`).

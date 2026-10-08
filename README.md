@@ -23,7 +23,7 @@
 > tested** with this project: API keys are accepted per session but provider
 > setups are unverified.
 >
-> Tested with opencode `1.18.31` (snapshot version; setup scripts default to the pinned `UPSTREAM_VERSION`).
+> Tested with opencode `1.18.35` (snapshot version; setup scripts default to the pinned `UPSTREAM_VERSION`).
 
 ## Download
 
@@ -99,13 +99,13 @@ Download the binary for your OS into `bin/` (binaries are **not** committed to g
 ```powershell
 # Windows
 .\scripts\setup.ps1
-# optionally: .\scripts\setup.ps1 -Version 1.18.31
+# optionally: .\scripts\setup.ps1 -Version 1.18.35
 ```
 
 ```bash
 # Linux / macOS
 ./scripts/setup.sh
-# optionally: ./scripts/setup.sh --version 1.18.31
+# optionally: ./scripts/setup.sh --version 1.18.35
 ```
 
 Run it:

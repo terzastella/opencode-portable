@@ -23,7 +23,7 @@
 > **non sono stati testati** con questo progetto: le API key si possono dare
 > al volo ma le configurazioni provider non sono verificate.
 >
-> Testato con opencode `1.18.31` (versione snapshot; gli script di setup usano `UPSTREAM_VERSION` pinnata).
+> Testato con opencode `1.18.35` (versione snapshot; gli script di setup usano `UPSTREAM_VERSION` pinnata).
 
 ## Download
 
@@ -96,13 +96,13 @@ Scarica il binario per il tuo OS in `bin/` (i binari **non** sono committati su 
 ```powershell
 # Windows
 .\scripts\setup.ps1
-# oppure: .\scripts\setup.ps1 -Version 1.18.31
+# oppure: .\scripts\setup.ps1 -Version 1.18.35
 ```
 
 ```bash
 # Linux / macOS
 ./scripts/setup.sh
-# oppure: ./scripts/setup.sh --version 1.18.31
+# oppure: ./scripts/setup.sh --version 1.18.35
 ```
 
 Esegui:
