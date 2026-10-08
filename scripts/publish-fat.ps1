@@ -68,10 +68,14 @@ try {
   $downloaded = $false
   if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
     # curl: fast, retry built-in, no PowerShell progress pathology.
-    $curlArgs = @('-fSL', '--retry', '3', '--retry-all-errors', '--connect-timeout', '30', '-o', $PayloadZip, $Url)
-    if ($env:GITHUB_TOKEN) { $curlArgs = @('-H', "Authorization: Bearer $($env:GITHUB_TOKEN)") + $curlArgs }
+    # The token travels via --config on stdin (never argv): invisible to `ps`.
+    $curlBase = @('-fSL', '--retry', '3', '--retry-all-errors', '--connect-timeout', '30', '-o', $PayloadZip, $Url)
     for ($i = 1; $i -le 3 -and -not $downloaded; $i++) {
-      & curl.exe @curlArgs
+      if ($env:GITHUB_TOKEN) {
+        "header = `"Authorization: Bearer $($env:GITHUB_TOKEN)`"" | & curl.exe --config - @curlBase
+      } else {
+        & curl.exe @curlBase
+      }
       if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $PayloadZip)) { $downloaded = $true }
       else { Step "download retry $i/3..."; Start-Sleep 5 }
     }
@@ -110,7 +114,18 @@ try {
   # Pin the hash: the launcher verifies it before every extraction (supply-chain
   # pinning without freezing the version - publish-fat resolves latest at build).
   $PayloadHash = Join-Path $PayloadDir 'opencode.zip.sha256'
-  (Get-FileHash -LiteralPath $PayloadZip -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content -LiteralPath $PayloadHash -NoNewline
+  $zipHashRecord = (Get-FileHash -LiteralPath $PayloadZip -Algorithm SHA256).Hash.ToLowerInvariant()
+  $zipHashRecord | Set-Content -LiteralPath $PayloadHash -NoNewline
+  # Committed pin (tracked): setup.* scripts fail closed against this for the
+  # same version+arch instead of trusting TLS alone. Upsert our line, keep
+  # other arches (recorded by their own publish runs).
+  $PinFile = Join-Path $Root 'UPSTREAM_VERSION.sha256'
+  $pinLine = "windows-$Arch $Version $zipHashRecord"
+  $pins = @()
+  if (Test-Path -LiteralPath $PinFile) { $pins = @(Get-Content -LiteralPath $PinFile | Where-Object { $_ -notmatch "^windows-$Arch\s+$Version\s+" -and $_.Trim() -ne "" }) }
+  $pins += $pinLine
+  $pins | Set-Content -LiteralPath $PinFile
+  Step "recorded hash pin: $pinLine"
 
   Step "publishing ($Rid)..."
   & dotnet publish (Join-Path $Root 'src\OpencodePortable\OpencodePortable.csproj') -c Release -r $Rid -o $OutDir

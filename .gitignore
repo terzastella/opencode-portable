@@ -15,8 +15,25 @@ bin/*
 *.pem
 *.p12
 *.pfx
+*.jks
+*.keystore
+*.asc
+*.gpg
+*.crt
+*.cer
+*.der
 id_rsa*
+id_ed25519*
+id_ecdsa*
+*.ppk
 secrets.json
+*credentials*.json
+*.token
+# Release-asset hashes live in dist/ (gitignored); the committed pin file is
+# the exception (see UPSTREAM_VERSION.sha256).
+*.sha256
+!UPSTREAM_VERSION.sha256
+*.cdx.json
 .DS_Store
 Thumbs.db
 Desktop.ini

@@ -8,7 +8,7 @@ updates — download the newest `OpencodePortable.exe` from
 
 | Version | Supported |
 |---|---|
-| latest (`v1.3.4`) | ✅ |
+| latest (`v1.3.6`) | ✅ |
 | older | ❌ |
 
 ## Scope — what this project is (and is not)
@@ -18,6 +18,15 @@ updates — download the newest `OpencodePortable.exe` from
   and can execute shell commands in the workspace.
 - Use **trusted workspaces only**: local folders, not shared/synced/untrusted
   locations. Anyone who can write the workspace can influence what runs.
+- The per-run root **inherits the workspace ACLs**: on a shared drive or a
+  synced folder, other people may read live credentials. Never use
+  shared/synced locations for sessions with secrets; prefer a local,
+  single-user folder.
+- `--clean-host` removes our WER/watchdog/crash leftovers but may need admin
+  for `%ProgramData%` archives; a standard user can only clean their own
+  profile. Exit code stays 0 with a skipped count — read the output.
+- Lost or stolen media means lost credentials: BitLocker-encrypt portable
+  drives and dismount them; EFS is not portable across machines.
 - "Zero traces" means application files and known runtime artifacts are
   removed (see README checklist). It is **not** forensic anti-tracking: OS and
   security telemetry (Prefetch, Defender/SmartScreen, USN Journal, shell
@@ -50,7 +59,7 @@ updates — download the newest `OpencodePortable.exe` from
 | Trusts | Does NOT trust |
 |---|---|
 | Microsoft Windows 10/11 OS itself | Workspace contents (treat as untrusted input) |
-| Upstream GitHub releases over HTTPS (no independent anchor — documented) | Binaries found in PATH (fail-closed, explicit opt-in) |
+| Upstream GitHub releases over HTTPS + committed hash pin (`UPSTREAM_VERSION.sha256`, setup.* fail closed; upstream publishes no checksums of its own) | Binaries found in PATH (fail-closed, explicit opt-in) |
 | The user running it (their machine, their choice) | Other local users/processes (single-user oriented) |
 
 ## Verifying a download

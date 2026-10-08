@@ -2,11 +2,27 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials only).
 Upstream opencode stays at `1.18.35` (see `UPSTREAM_VERSION`) unless noted.
-Only `v1.3.5` is published (tags `v1.3.1`–`v1.3.3` were removed, `v1.3.4`
-stays as prior release); older entries below are kept as change history. The
+Only `v1.3.6` is published (tags `v1.3.1`–`v1.3.3` were removed, `v1.3.4`–`v1.3.5`
+stay as prior releases); older entries below are kept as change history. The
 `[v1.3.4]` section also consolidates the untagged `v1.3.3` work.
 
 ## [Unreleased]
+
+## [v1.3.6]
+
+- Privacy: central `ScrubIdentity` (profile/TEMP/app-data paths both slash
+  forms, username, domain, hostname) applied to crash logs, console errors
+  and watchdog telemetry; telemetry logs swept with dead-owner rule.
+- Validation: `--picker-exe` gated behind test flags, `--watch`/`--watch-hop`
+  reject unverifiable identities, `.lock` via `CreateNew` fail-closed,
+  binary re-verified just before spawn, crash-sweep reparse-safe.
+- Supply chain: committed `UPSTREAM_VERSION.sha256` pin (`setup.*` fail
+  closed), explicit versions validated, retry/timeout everywhere, tokens never
+  in argv, secret-scan extended (more prefixes, `src/` included, redacted
+  output), CI least-privilege + token blanked on binary-exec steps.
+- Build privacy: `PathMap` + deterministic build strip builder paths from PDBs.
+- Docs: honest hero/checklist (TEMP checks, best-effort wording, WER payload
+  gap, forensic scope, ACL guidance), upstream copyright + fork chain noted.
 
 ## [v1.3.5]
 

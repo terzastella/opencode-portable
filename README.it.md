@@ -4,7 +4,7 @@
 
 <h1 align="center">Opencode Portable</h1>
 
-<p align="center">Esegui <a href="https://github.com/anomalyco/opencode">opencode</a> come vera app portatile su <b>Windows 10 / 11</b>: doppio-click, scegli la cartella, lavora.<br>Chiudila — uscita, X, Ctrl+C, persino kill da Task Manager — e l'app rimuove i suoi file (verificabile con la checklist sotto; <a href="#verifica-zero-tracce">nota sui limiti OS</a>).</p>
+<p align="center">Esegui <a href="https://github.com/anomalyco/opencode">opencode</a> come vera app portatile su <b>Windows 10 / 11</b>: doppio-click, scegli la cartella, lavora.<br>Chiudila — uscita, X, Ctrl+C, persino kill da Task Manager — e l'app rimuove i suoi file, best-effort entro i timeout (verificabile con la checklist sotto; <a href="#verifica-zero-tracce">nota sui limiti OS</a>).</p>
 
 <p align="center">
   <a href="README.md"><img src="https://img.shields.io/badge/English-read-lightgrey" alt="English"></a>
@@ -49,7 +49,7 @@ if ((Get-FileHash OpencodePortable.exe -Algorithm SHA256).Hash.ToLower() -ne (Ge
 | Aspetto | Cosa ottieni |
 |---|---|
 | Isolamento | Config, dati, cache, stato e temp in `<workspace>/.opencode-portable-<data-ora>-<pid>-<rand>/`, cancellata all'uscita — normale, X/Alt+F4, Ctrl+C e kill Task Manager inclusi |
-| Offline | Binario opencode incorporato, estratto al primo avvio — mai rete |
+| Offline | Binario opencode incorporato, estratto al primo avvio — il launcher non scarica mai nulla (il traffico dei modelli opencode e i controlli reputazione OS usano comunque rete) |
 | Avvio veloce | Salta il fetch bloccante di 10–30 s da `models.dev` |
 | Niente login salvato | I modelli free integrati funzionano subito; le API key si danno al volo, mai salvate |
 | Istanze concorrenti | Ognuna ha la sua cartella — niente condivisioni, niente lock |
@@ -64,11 +64,16 @@ dir "C:\percorso\workspace" /a
 :: 2. residui noti su C: (il solo exe è atteso):
 dir C:\*opencode* /s /b /a
 dir C:\opwatch-*.exe /s /b /a
-:: 3. nessun processo rimasto (tasklist non accetta *):
+:: 3. TEMP host: residui crash/watchdog dopo failure:
+dir %TEMP%\opencode-portable-crash-* /a
+dir %TEMP%\opencode-portable-watchdog-*.log /a
+:: 4. nessun processo rimasto (tasklist non accetta *):
 tasklist | findstr /I "opencode opwatch"
 ```
 
-Atteso: solo i tuoi file, solo l'exe, nessun processo.
+Atteso: solo i tuoi file, solo l'exe, nessun processo. Dopo crash o kill
+forzata, esegui `OpencodePortable.exe --clean "C:\percorso\workspace"` e
+`--clean-host`, poi ricontrolla.
 
 <details>
 <summary><b>Build dai sorgenti</b></summary>
@@ -192,7 +197,7 @@ L'exe aggiunge: picker supervisionato in processo figlio (il crash nativo degrad
 al drag-and-drop), cancellazione con retry contro i lock (resti segnalati, mai
 silenziosi), `--clean <workspace>`, e guardiano orfano (`opwatch-<pid>-<rand>.exe`
 autoeliminante) anche per i kill di gruppo da Task Manager. Telemetria scritta in `%TEMP%`
-solo in caso di fallimento/abort/resti, mai a successo.
+solo in caso di fallimento/abort/resti, mai a successo (identità oscurata, spazzata al giro dopo).
 
 Dettagli in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (in inglese).
 
@@ -214,15 +219,15 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 <details>
 <summary><b>Note di sicurezza</b></summary>
 
-- **I binari sono artefatti upstream fidati**: `setup.*` scarica e `publish-fat.ps1` incorpora via HTTPS dalle GitHub releases. L'hash SHA-256 del payload è incorporato al build e riverificato a ogni estrazione; manca solo l'anchor indipendente (upstream non pubblica checksum/firme — se mai lo farà, verificateli voi stessi).
-- **Le credenziali stanno in `data/` (script) o `<workspace>/.opencode-portable-*/` (exe)** (token auth, API key): non condividere né pubblicare quelle cartelle, e non distribuire archivi che le contengono — `pack-release` le esclude di proposito. Chiavetta persa = credenziali perse.
-- **Gli zip scaricati hanno il Mark-of-the-Web**: su altri PC Windows può bloccare i launcher `.ps1` (execution policy). Usa `opencode-portable.cmd`, o `Unblock-File`, dopo aver ispezionato il contenuto.
+- **I binari sono artefatti upstream fidati**: `setup.*` scarica e `publish-fat.ps1` incorpora via HTTPS dalle GitHub releases. L'hash SHA-256 del payload è incorporato al build e riverificato a ogni estrazione; `setup.*` in più rifiuta l'installazione se l'hash non coincide col pin committato (`UPSTREAM_VERSION.sha256`). Manca solo l'anchor indipendente (upstream non pubblica checksum/firme proprie — se mai lo farà, verificateli voi stessi).
+- **Le credenziali stanno in `data/` (script) o `<workspace>/.opencode-portable-*/` (exe)** (token auth, API key): non condividere né pubblicare quelle cartelle, e non distribuire archivi che le contengono — `pack-release` le esclude di proposito. Chiavetta persa = credenziali perse. La root per-run eredita gli ACL del workspace: su share/cartelle sincronizzate altri potrebbero leggere credenziali vive — per sessioni con segreti usa un workspace locale monoutente.
+- **I file scaricati hanno il Mark-of-the-Web**: su altri PC Windows può bloccare i launcher `.ps1` (execution policy) e SmartScreen può segnalare l'exe non firmato. Verifica lo `.sha256` prima, poi usa `opencode-portable.cmd`, o `Unblock-File`, dopo aver ispezionato il contenuto.
 - Questo wrapper isola i file, **non fa sandbox** di opencode: un AI coding agent esegue comandi shell nel tuo workspace — controlla cosa fa, come con qualsiasi installazione upstream.
 - **Modello di trust**: il workspace NON è un confine di sicurezza — usa solo cartelle fidate (niente share di rete, cartelle sincronizzate scrivibili da altri, o repo non attendibili); chi può scrivere il workspace può influenzare config, cache e binari estratti. Stesso discorso per `--from-path` / `OPENCODE_ALLOW_PATH_FALLBACK=1`: bypassa il trust del payload incorporato ed esegue il primo `opencode` nel PATH — il percorso viene sempre stampato, verificane l'hash se hai dubbi.
 - **Aggiornamenti**: nessun auto-update (`autoupdate: false`); ogni release fissa la sua versione di opencode nel file `UPSTREAM_VERSION` al build (`publish-fat` lo usa salvo `-Version` esplicita, poi incorpora + hash). Per aggiornare, cambia il file e scarica la nuova release.
 - **CI**: ogni push/PR compila su Windows e lancia la suite di self-test (badge stato qui sopra; i tag eseguono un job `fat` completo in più).
-- **Niente Windows Error Reporting**: l'exe silenzia il WER per i propri crash (compresi gli AV supervisionati del picker) così nulla finisce in `ReportArchive`; la diagnostica resta nei nostri `crash-*.log` (`<root>/state/` di norma, `%TEMP%\opencode-portable-crash-*/` solo se il crash avviene prima che un workspace sia noto; ultimi 5 conservati, username oscurati). `--clean-host` rimuove le nostre tracce host-side (vecchi archivi WER, telemetria watchdog, dir crash TEMP) — per i preesistenti può servire admin.
-- **Limiti di "zero tracce"**: rimuove i file applicativi e gli artefatti runtime noti (verificabile con la checklist sotto). **Non** è anti-tracciamento forense: telemetria OS/sicurezza fuori dal nostro controllo (Prefetch, Defender/SmartScreen, USN Journal, pagefile, cronologia shell, log antivirus) non è rimovibile da nessuna app portable.
+- **Niente Windows Error Reporting (solo launcher + picker)**: l'exe silenzia il WER per i propri crash (compresi gli AV supervisionati del picker) così nulla finisce in `ReportArchive`; un crash nativo del payload `opencode` invece viene comunque riportato al WER (immagine separata) — `--clean-host` non li copre. La diagnostica resta nei nostri `crash-*.log` (`<root>/state/` di norma, `%TEMP%\opencode-portable-crash-*/` solo se il crash avviene prima che un workspace sia noto, spazzati dopo 7 giorni; ultimi 5 conservati, identità oscurata: percorsi profilo/TEMP, username, dominio, hostname). `--clean-host` rimuove le nostre tracce host-side (vecchi archivi WER, telemetria watchdog, dir crash TEMP) — per i preesistenti può servire admin.
+- **Limiti di "zero tracce"**: rimuove i file applicativi e gli artefatti runtime noti (verificabile con la checklist sotto). **Non** è anti-tracciamento forense: telemetria OS/sicurezza fuori dal nostro controllo (Prefetch, Amcache/Shimcache, BAM, JumpLists/Recent, Defender/SmartScreen, USN Journal, pagefile/hiberfil, cronologia shell, scrollback console, log antivirus) non è rimovibile da nessuna app portable. Preferisci `--workspace <dir>` al drag-and-drop (i percorsi digitati restano nella cronologia PSReadLine e nello scrollback).
 
 </details>
 

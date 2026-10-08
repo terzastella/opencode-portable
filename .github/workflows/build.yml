@@ -1,5 +1,11 @@
 name: build
 
+# Least privilege: both jobs only read the repo. The fat job additionally
+# executes a downloaded upstream binary: its token is blanked on exec steps
+# so a trojaned payload cannot exfiltrate it.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -52,7 +58,7 @@ jobs:
       - name: No runtime artifacts tracked
         shell: pwsh
         run: |
-          $bad = git ls-files | Select-String -Pattern '^(data|dist)/|^bin/.+\.exe$|payload/' | ForEach-Object { $_.Line }
+          $bad = git ls-files | Select-String -Pattern '^(data|dist|dist-pack)/|^bin/.+\.(exe|new)$|\.new$|payload/|config/opencode\.json$' | ForEach-Object { $_.Line }
           if ($bad) { throw ("tracked runtime artifacts:`n" + ($bad -join "`n")) }
           Write-Host 'tracked files clean.'
 
@@ -63,6 +69,13 @@ jobs:
           $v = (Get-Content -LiteralPath UPSTREAM_VERSION -Raw).Trim()
           if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "UPSTREAM_VERSION malformed: $v" }
           Write-Host "pinned upstream: $v"
+          if (-not (Test-Path -LiteralPath UPSTREAM_VERSION.sha256)) { throw 'UPSTREAM_VERSION.sha256 missing' }
+          $pins = @(Get-Content -LiteralPath UPSTREAM_VERSION.sha256 | Where-Object { $_.Trim() -ne '' })
+          if ($pins.Count -eq 0) { throw 'UPSTREAM_VERSION.sha256 empty' }
+          foreach ($p in $pins) {
+            if ($p -notmatch '^[\w-]+\s+\d+\.\d+\.\d+\s+[0-9a-f]{64}\s*$') { throw "hash pin malformed: $p" }
+          }
+          Write-Host ("hash pins: {0}" -f $pins.Count)
 
   # Full release-path verification, tags only (slow: downloads ~58MB payload).
   # Fast smoke job above stays green on every push; this proves publish-fat,
@@ -87,6 +100,11 @@ jobs:
           powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/publish-fat.ps1 -Version $v
 
       - name: Payload assert + smoke run
+        # Token blanked: this step EXECUTES the downloaded upstream binary, so
+        # a trojaned payload must find no credential to exfiltrate. The download
+        # step above keeps the token for rate limits.
+        env:
+          GITHUB_TOKEN: ''
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'

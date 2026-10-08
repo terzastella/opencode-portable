@@ -32,10 +32,10 @@ internal static class Program
             // Fatal guard: on double-click the console closes instantly, so show a
             // native message box (P/Invoke) AND write a crash log with full stack —
             // never die silently, always diagnosable in one shot.
-            string stack = ex.ToString();
+            string stack = ScrubIdentity(ex.ToString());
             string[] lines = stack.Split('\n');
             string shortStack = string.Join("\n", lines[..Math.Min(8, lines.Length)]);
-            string msg = $"[opencode-portable] ERRORE FATALE: {ex.GetType().Name}: {ex.Message}\n\n{shortStack}";
+            string msg = ScrubIdentity($"[opencode-portable] ERRORE FATALE: {ex.GetType().Name}: {ex.Message}\n\n{shortStack}");
             Console.Error.WriteLine(msg);
             try
             {
@@ -44,21 +44,15 @@ internal static class Program
                 // shared global dir two runs could fight over). Never next to exe.
                 // NOTE: forwarded opencode args are NEVER logged (they may carry
                 // secrets); only the launcher-owned flag count.
-                int ownedCount = args.Count(a => a.StartsWith("--"));
+                int ownedCount = args.Count(a => a.StartsWith("--", StringComparison.Ordinal));
                 string logDir = s_crashDir ?? Path.Combine(Path.GetTempPath(),
                     "opencode-portable-crash-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(logDir);
-                // Privacy: scrub identity-bearing path fragments (username in all
-                // common forms, home drives, hostname); keep only the last 5 logs.
-                foreach (string var in new[] { "USERPROFILE", "HOMEDRIVE", "HOMEPATH" })
-                {
-                    string val = Environment.GetEnvironmentVariable(var) ?? "";
-                    if (!string.IsNullOrEmpty(val)) stack = stack.Replace(val, "~", StringComparison.OrdinalIgnoreCase);
-                }
-                string user = Environment.GetEnvironmentVariable("USERNAME") ?? "";
-                if (!string.IsNullOrEmpty(user)) stack = stack.Replace(user, "~user", StringComparison.OrdinalIgnoreCase);
-                string host = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "";
-                if (!string.IsNullOrEmpty(host)) stack = stack.Replace(host, "~host", StringComparison.OrdinalIgnoreCase);
+                // Privacy: scrub identity-bearing fragments (profile/TEMP paths,
+                // username in all common forms, home drives, domain, hostname).
+                // Both the file and the on-screen message are scrubbed: paths in
+                // shared screenshots must not leak the user profile.
+                stack = ScrubIdentity(stack);
                 File.WriteAllText(
                     Path.Combine(logDir, $"crash-{DateTime.Now:yyyyMMdd-HHmmss-fff}-{Environment.ProcessId}.log"),
                     $"[{DateTime.Now:O}] {stack}\nLauncherFlags: {ownedCount}\n");
@@ -96,6 +90,30 @@ internal static class Program
     /// stateless: nothing is ever written next to it.
     /// </summary>
     private static string? s_crashDir;
+
+    /// <summary>
+    /// Redacts identity-bearing fragments: profile/TEMP/app-data paths (both
+    /// backslash and forward-slash forms), username, domain and hostname.
+    /// Single choke point used by crash logs, console errors and watchdog
+    /// telemetry so no new output path can leak the user profile by accident.
+    /// </summary>
+    internal static string ScrubIdentity(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return s ?? "";
+        foreach (string var in new[] { "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "TEMP", "TMP", "LOCALAPPDATA", "APPDATA", "USERDOMAIN" })
+        {
+            string val = Environment.GetEnvironmentVariable(var) ?? "";
+            if (val.Length == 0) continue;
+            s = s.Replace(val, "~", StringComparison.OrdinalIgnoreCase);
+            string fwd = val.Replace('\\', '/');
+            if (fwd != val) s = s.Replace(fwd, "~", StringComparison.OrdinalIgnoreCase);
+        }
+        string user = Environment.GetEnvironmentVariable("USERNAME") ?? "";
+        if (user.Length > 0) s = s.Replace(user, "~user", StringComparison.OrdinalIgnoreCase);
+        string host = Environment.GetEnvironmentVariable("COMPUTERNAME") ?? "";
+        if (host.Length > 0) s = s.Replace(host, "~host", StringComparison.OrdinalIgnoreCase);
+        return s;
+    }
 
     private enum PickOutcome { Ok, Cancel, Fallback }
 
@@ -288,8 +306,10 @@ internal static class Program
             {
                 try
                 {
+                    // Reparse-safe: a squatted crash-* name holding a junction
+                    // must be removed itself, never followed into.
                     if (Directory.GetLastWriteTime(d) < cutoff)
-                        Directory.Delete(d, recursive: true);
+                        PortableRun.RobustDelete(d, 3000);
                 }
                 catch { }
             }
@@ -314,10 +334,10 @@ internal static class Program
         {
             if (args[i] == "--from-path") { allowPath = true; continue; }
             if (args[i] == "--console") { forceConsole = true; continue; }
-            if (args[i] == "--picker-exe") { if (i + 1 >= args.Length) { Console.Error.WriteLine("[opencode-portable] ERRORE: --picker-exe richiede un percorso."); return 1; } pickerExe = args[++i]; continue; }
-            if (args[i].StartsWith("--picker-exe=")) { pickerExe = args[i]["--picker-exe=".Length..]; continue; }
-            if (args[i] == "--workspace") { if (i + 1 >= args.Length) { Console.Error.WriteLine("[opencode-portable] ERRORE: --workspace richiede una cartella."); return 1; } workspace = args[++i]; if (workspace.StartsWith("--")) { Console.Error.WriteLine("[opencode-portable] ERRORE: --workspace richiede una cartella, non un flag."); return 1; } continue; }
-            if (args[i].StartsWith("--workspace=")) { workspace = args[i]["--workspace=".Length..]; if (string.IsNullOrWhiteSpace(workspace) || workspace.StartsWith("--")) { Console.Error.WriteLine("[opencode-portable] ERRORE: --workspace= richiede una cartella valida."); return 1; } continue; }
+            if (args[i] == "--picker-exe") { if (!TestsEnabled()) return 1; if (i + 1 >= args.Length) { Console.Error.WriteLine("[opencode-portable] ERRORE: --picker-exe richiede un percorso."); return 1; } pickerExe = args[++i]; if (string.IsNullOrWhiteSpace(pickerExe)) { Console.Error.WriteLine("[opencode-portable] ERRORE: --picker-exe richiede un percorso non vuoto."); return 1; } continue; }
+            if (args[i].StartsWith("--picker-exe=", StringComparison.Ordinal)) { if (!TestsEnabled()) return 1; pickerExe = args[i]["--picker-exe=".Length..]; if (string.IsNullOrWhiteSpace(pickerExe)) { Console.Error.WriteLine("[opencode-portable] ERRORE: --picker-exe= richiede un percorso non vuoto."); return 1; } continue; }
+            if (args[i] == "--workspace") { if (i + 1 >= args.Length) { Console.Error.WriteLine("[opencode-portable] ERRORE: --workspace richiede una cartella."); return 1; } workspace = args[++i]; if (workspace.StartsWith("--", StringComparison.Ordinal)) { Console.Error.WriteLine("[opencode-portable] ERRORE: --workspace richiede una cartella, non un flag."); return 1; } continue; }
+            if (args[i].StartsWith("--workspace=", StringComparison.Ordinal)) { workspace = args[i]["--workspace=".Length..]; if (string.IsNullOrWhiteSpace(workspace) || workspace.StartsWith("--", StringComparison.Ordinal)) { Console.Error.WriteLine("[opencode-portable] ERRORE: --workspace= richiede una cartella valida."); return 1; } continue; }
             if (args[i] == "--self-test")
             {
                 if (NativeFolderDialog.SelfTest(out string detail))
@@ -354,8 +374,10 @@ internal static class Program
             {
                 // Watchdog mode: wait for the given pid, then delete the dir.
                 // Never runs opencode, never touches the workspace otherwise.
-                if (args.Length > i + 3 && int.TryParse(args[i + 1], out int wpid)
-                    && long.TryParse(args[i + 2], out long wticks))
+                // Negative/zero identities are unverifiable: refuse instead of
+                // letting the watchdog abort-and-delete on ambiguity.
+                if (args.Length > i + 3 && int.TryParse(args[i + 1], out int wpid) && wpid > 0
+                    && long.TryParse(args[i + 2], out long wticks) && wticks != 0)
                 {
                     string wdir = args[i + 3];
                     return PortableRun.WatchdogRoot(wpid, wticks, wdir);
@@ -395,6 +417,12 @@ internal static class Program
                 if (args.Length > i + 3)
                 {
                     string hp = args[i + 1], ht = args[i + 2], hd = args[i + 3];
+                    if (!int.TryParse(hp, out int hpid) || hpid <= 0
+                        || !long.TryParse(ht, out long hticks) || hticks == 0)
+                    {
+                        Console.Error.WriteLine("[opencode-portable] ERRORE: uso: --watch-hop <pid> <startTicks> <dir>");
+                        return 1;
+                    }
                     return PortableRun.WatchHop(hp, ht, hd);
                 }
                 Console.Error.WriteLine("[opencode-portable] ERRORE: uso: --watch-hop <pid> <startTicks> <dir>");
@@ -494,8 +522,8 @@ internal static class Program
                 Console.OutputEncoding = System.Text.Encoding.UTF8;
                 string pTitle = "Seleziona cartella";
                 string pInitial = "";
-                if (i + 1 < args.Length && !args[i + 1].StartsWith("--")) pTitle = args[++i];
-                if (i + 1 < args.Length && !args[i + 1].StartsWith("--")) pInitial = args[++i];
+                if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal)) pTitle = args[++i];
+                if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal)) pInitial = args[++i];
                 return RunPickerChild(pTitle, pInitial);
             }
             if (args[i] == "--")
@@ -566,17 +594,25 @@ internal static class Program
         // timestamp-seeded Random: unpredictable against pre-squat).
         string stamp = $"{DateTime.Now:yyyyMMdd-HHmmss}-{Environment.ProcessId}-{System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 999999)}";
         string data = Path.Combine(workFull, $".opencode-portable-{stamp}");
-        foreach (string d in new[] { "config", "data", "cache", "state", "tmp", "bin" })
-            Directory.CreateDirectory(Path.Combine(data, d));
-        // Ownership lock: pid + process start ticks, so the sweeper (and the
-        // watchdog) can tell OUR live root from a recycled PID, without trust.
         try
         {
+            foreach (string d in new[] { "config", "data", "cache", "state", "tmp", "bin" })
+                Directory.CreateDirectory(Path.Combine(data, d));
+            // Ownership lock: pid + process start ticks, so the sweeper (and the
+            // watchdog) can tell OUR live root from a recycled PID, without trust.
+            // Fail-closed: a live root WITHOUT a lock would be swept mid-run.
             long ticks = 0;
             try { using var me = Process.GetCurrentProcess(); ticks = me.StartTime.Ticks; } catch { }
-            File.WriteAllText(Path.Combine(data, ".lock"), $"{Environment.ProcessId}:{ticks}");
+            using (var fs = new FileStream(Path.Combine(data, ".lock"), FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (var sw = new StreamWriter(fs))
+                sw.Write($"{Environment.ProcessId}:{ticks}");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[opencode-portable] ERRORE: root non inizializzabile: {ex.GetType().Name}");
+            CleanupRoot(data);
+            return 1;
+        }
         s_crashDir = Path.Combine(data, "state");
         SweepStalePortableRoots(workFull);
 
@@ -688,12 +724,6 @@ internal static class Program
             using var p = Process.GetProcessById(pid);
             return !p.HasExited && p.StartTime.Ticks == ticks;
         }
-        catch { return false; }
-    }
-
-    private static bool IsPidAlive(int pid)
-    {
-        try { using var p = Process.GetProcessById(pid); return !p.HasExited; }
         catch { return false; }
     }
 
@@ -879,7 +909,16 @@ internal static class Program
 
     private static string? ResolveBinary(string root, string? bin, bool allowPath)
     {
-        if (bin is not null && File.Exists(bin)) return bin;
+        // Re-verify just before use: narrows the check-then-spawn window (a
+        // planted swap after FindBundled fails the size gate here instead of
+        // being spawned). Not a signature check: see trust docs.
+        if (bin is not null && File.Exists(bin))
+        {
+            try { if (new FileInfo(bin).Length >= 10L * 1024 * 1024) return bin; }
+            catch { }
+            Console.Error.WriteLine("[opencode-portable] ERRORE: binario non valido alla ri-verifica, annullo.");
+            return null;
+        }
         // Fail-closed PATH fallback: explicit opt-in only, resolved path always shown.
         if (!allowPath)
         {

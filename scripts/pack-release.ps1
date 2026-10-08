@@ -13,17 +13,23 @@ $SecretPatterns = @(
   'sk-ant-[A-Za-z0-9\-_]{20,}',
   'ghp_[A-Za-z0-9]{20,}',
   'gho_[A-Za-z0-9]{20,}',
+  'ghu_[A-Za-z0-9]{20,}',
+  'ghs_[A-Za-z0-9]{20,}',
+  'github_pat_[A-Za-z0-9_]{20,}',
+  'AIza[0-9A-Za-z\-_]{35}',
   'AKIA[0-9A-Z]{16}',
   'xox[bpas]\-[A-Za-z0-9\-]{10,}',
+  'eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\.\-]{10,}',
   '-----BEGIN [A-Z ]*PRIVATE KEY-----',
-  '(?i)api[_-]?key\s*[:=]\s*[''"][^''"]{8,}'
+  '(?i)api[_-]?key\s*[:=]\s*[''"][^''"]{8,}',
+  '(?i)\b(api[_-]?key|client[_-]?secret|auth[_-]?token|access[_-]?token|passwd|password)\s*[:=]\s*[''"]?\S{8,}'
 )
 $Include = @(
   'opencode-portable.cmd', 'opencode-portable.ps1', 'opencode-portable.sh',
   'LICENSE', 'README.md', 'README.it.md', 'SECURITY.md', 'CHANGELOG.md',
-  'THIRD-PARTY-NOTICES.md', 'UPSTREAM_VERSION', 'global.json',
+  'THIRD-PARTY-NOTICES.md', 'UPSTREAM_VERSION', 'UPSTREAM_VERSION.sha256', 'global.json',
   'assets', 'bin/.gitkeep', 'config/opencode.example.json',
-  'docs', 'scripts', '.github'
+  'docs', 'scripts', '.github', 'src'
 )
 
 Write-Host "[pack] validating include list..."
@@ -36,10 +42,16 @@ foreach ($rel in $Include) {
 Write-Host "[pack] secret scan..."
 $files = foreach ($rel in $Include) {
   $p = Join-Path $Root $rel
-  if (Test-Path -LiteralPath $p -PathType Container) { Get-ChildItem -LiteralPath $p -Recurse -File }
-  elseif (Test-Path -LiteralPath $p) { Get-Item -LiteralPath $p }
+  # -Force: hidden/system files ship in the zip too (Copy-Item -Force below),
+  # so they must be scanned as well.
+  if (Test-Path -LiteralPath $p -PathType Container) { Get-ChildItem -LiteralPath $p -Recurse -File -Force }
+  elseif (Test-Path -LiteralPath $p) { Get-Item -LiteralPath $p -Force }
 }
-$hits = $files | Select-String -Pattern $SecretPatterns -ErrorAction SilentlyContinue
+$hits = $files | Where-Object {
+  # Build outputs ship never (dropped from stage below) and are binary noise:
+  # scan sources only.
+  $_.FullName -notmatch '\\(bin|obj|payload)\\'
+} | Select-String -Pattern $SecretPatterns -ErrorAction SilentlyContinue
 if ($hits) {
   Write-Host "[pack] ERROR: possible secrets found:" -ForegroundColor Red
   $hits | ForEach-Object { Write-Host ("  " + $_.Path + ":" + $_.LineNumber) -ForegroundColor Red }
@@ -70,6 +82,18 @@ try {
   }
   # Never ship a local config even if the exclude list drifts
   Remove-Item -LiteralPath (Join-Path $stage 'config/opencode.json') -Force -ErrorAction SilentlyContinue
+  # Never ship build outputs (bin/obj/payload) that live under src/ on disk.
+  Get-ChildItem -LiteralPath (Join-Path $stage 'src') -Recurse -Directory -Force -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -eq 'bin' -or $_.Name -eq 'obj' -or $_.Name -eq 'payload' } |
+    ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+  # Re-scan the STAGE (not just sources): something landing in $stage between
+  # scan and archive must not ship unscanned.
+  $stageHits = Get-ChildItem -LiteralPath $stage -Recurse -File -Force -ErrorAction SilentlyContinue | Select-String -Pattern $SecretPatterns -ErrorAction SilentlyContinue
+  if ($stageHits) {
+    Write-Host "[pack] ERROR: possible secrets found in staging:" -ForegroundColor Red
+    $stageHits | ForEach-Object { Write-Host ("  " + $_.Path + ":" + $_.LineNumber) -ForegroundColor Red }
+    throw "[pack] stage scan failed."
+  }
   Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $Zip
   Write-Host "[pack] OK -> $Zip"
 } finally {

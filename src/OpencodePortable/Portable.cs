@@ -193,12 +193,13 @@ internal static class PortableRun
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[opencode-portable] ERRORE: {ex}");
+            Console.Error.WriteLine($"[opencode-portable] ERRORE: {Program.ScrubIdentity(ex.ToString())}");
             return 1;
         }
         finally
         {
             s_child = null;
+            s_dataRoot = null;
             try { SetConsoleCtrlHandler(s_ctrlHandler, add: false); } catch { }
             // Full privacy: delete the ENTIRE per-run root, always, on any exit
             // path or code. Retry budget ~10s for draining locks (running image,
@@ -374,13 +375,16 @@ internal static class PortableRun
         try
         {
             try { SetConsoleCtrlHandler(s_ignoreHandler, add: true); } catch { }
-            Tele($"start pid={parentPid} ticks={parentStartTicks} dir={dir}");
+            // Telemetry never carries raw paths: scrubbed at the source so a
+            // flushed log in host TEMP cannot leak the user profile.
+            string dirShown = Program.ScrubIdentity(dir);
+            Tele($"start pid={parentPid} ticks={parentStartTicks} dir={dirShown}");
             // Strict: only delete our own per-run roots. Anything else (or an
             // unverifiable parent identity) aborts instead of deleting blindly.
             if (!IsPortableRootName(Path.GetFileName(dir.TrimEnd(Path.DirectorySeparatorChar))))
             {
                 Tele("abort: dir non valida");
-                WEcho("[watchdog] ERRORE: dir non valida, niente da cancellare: " + dir);
+                WEcho("[watchdog] ERRORE: dir non valida, niente da cancellare: " + dirShown);
                 FlushTele();
                 try { SelfDeleteCopy(); } catch { }
                 return 1;
@@ -460,7 +464,7 @@ internal static class PortableRun
                     if (!img.StartsWith(dirCanon + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
                     try
                     {
-                        Tele($"kill residuo pid={p.Id} img={img}");
+                        Tele($"kill residuo pid={p.Id} img={Program.ScrubIdentity(img)}");
                         p.Kill(entireProcessTree: true);
                     }
                     catch { try { p.Kill(); } catch { } }
@@ -472,8 +476,9 @@ internal static class PortableRun
             var left = RobustDelete(dir, 15000);
             if (left.Count > 0)
             {
-                Tele("resti: " + string.Join(", ", left.Take(10)));
-                WEcho("[watchdog] ATTENZIONE resti: " + string.Join(", ", left.Take(10)));
+                string resti = Program.ScrubIdentity(string.Join(", ", left.Take(10)));
+                Tele("resti: " + resti);
+                WEcho("[watchdog] ATTENZIONE resti: " + resti);
                 FlushTele();
             }
             SelfDeleteCopy(); // copies remove themselves; originals never reach here as copies
@@ -483,7 +488,7 @@ internal static class PortableRun
         {
             try
             {
-                teleBuf.Add("FATAL: " + ex);
+                teleBuf.Add("FATAL: " + Program.ScrubIdentity(ex.ToString()));
                 FlushTele();
             }
             catch { }
@@ -1061,7 +1066,9 @@ internal static class PortableRun
 
     /// <summary>
     /// Sweeps stale watchdog copies in TEMP (dead owner PID). Live owners keep
-    /// their copy: a running watchdog's image is locked anyway.
+    /// their copy: a running watchdog's image is locked anyway. Failure
+    /// telemetry logs (opencode-portable-watchdog-*.log) are swept under the
+    /// same dead-owner rule so an aborted run leaves no host trace behind.
     /// </summary>
     internal static int SweepWatchdogCopies()
     {
@@ -1079,6 +1086,26 @@ internal static class PortableRun
                 string[] parts = name.Split('-');
                 if (parts.Length != 3 || parts[0] != "opwatch") continue;
                 if (!int.TryParse(parts[1], out int pid)) continue;
+                bool alive = true;
+                try { using var p = Process.GetProcessById(pid); alive = !p.HasExited; }
+                catch { alive = false; }
+                if (alive) continue;
+                File.Delete(f);
+                removed++;
+            }
+            catch { }
+        }
+        string[] logs;
+        try { logs = Directory.GetFiles(tmp, "opencode-portable-watchdog-*.log"); }
+        catch { return removed; }
+        foreach (string f in logs)
+        {
+            try
+            {
+                // opencode-portable-watchdog-<pid>-<rand>.log
+                string[] parts = Path.GetFileNameWithoutExtension(f).Split('-');
+                if (parts.Length != 5 || parts[0] != "opencode" || parts[1] != "portable" || parts[2] != "watchdog") continue;
+                if (!int.TryParse(parts[3], out int pid)) continue;
                 bool alive = true;
                 try { using var p = Process.GetProcessById(pid); alive = !p.HasExited; }
                 catch { alive = false; }

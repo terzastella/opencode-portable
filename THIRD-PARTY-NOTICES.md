@@ -13,9 +13,14 @@ license. This project's own code is MIT (see `LICENSE`).
 Notes:
 
 - The embedded opencode payload is downloaded at build time from upstream
-  GitHub releases, hash-pinned (SHA-256 stored alongside) and re-verified
-  before every extraction. Upstream publishes no independent checksums or
+  GitHub releases, hash-pinned (SHA-256 stored alongside and committed in
+  `UPSTREAM_VERSION.sha256`, verified by `setup.*` and re-verified before
+  every extraction). Upstream publishes no independent checksums or
   signatures; see `SECURITY.md` and `docs/HOW-IT-WORKS.md` for the trust model.
+- "Upstream" here is the `anomalyco/opencode` fork (itself derived from
+  `sst/opencode`), MIT-licensed, `Copyright (c) 2025 opencode` — preserved in
+  the upstream repository; this file records origin and version per MIT
+  attribution requirements.
 - The app logo in `assets/` is original work for this project (MIT, same as
   the repo).
 - If a component above changes version or license, update this file in the
