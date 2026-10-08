@@ -10,6 +10,10 @@ stay as prior releases); older entries below are kept as change history. The
 
 ## [v1.3.6]
 
+- Guard reporting: host-guard delete failures are reported (never silent) with
+  a `--clean-host` pointer; `--clean-host` also sweeps empty guard-path
+  fossils (non-empty dirs are reported, never deleted blindly).
+
 - Privacy: central `ScrubIdentity` (profile/TEMP/app-data paths both slash
   forms, username, domain, hostname) applied to crash logs, console errors
   and watchdog telemetry; telemetry logs swept with dead-owner rule.

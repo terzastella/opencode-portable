@@ -141,24 +141,8 @@ internal static class PortableRun
         // only paths created after run start are ever removed.
         DateTime runStart = DateTime.Now;
         var sysTargets = new List<(string Path, bool Existed)>();
-        string? userProfile = Environment.GetEnvironmentVariable("USERPROFILE");
-        var bases = new List<string?>();
-        bases.Add(Environment.GetEnvironmentVariable("TEMP"));
-        bases.Add(Environment.GetEnvironmentVariable("LOCALAPPDATA"));
-        bases.Add(Environment.GetEnvironmentVariable("APPDATA"));
-        if (!string.IsNullOrEmpty(userProfile))
-        {
-            bases.Add(Path.Combine(userProfile, ".config"));
-            bases.Add(Path.Combine(userProfile, ".local", "share"));
-        }
-        foreach (string? baseDir in bases)
-        {
-            if (string.IsNullOrEmpty(baseDir)) continue;
-            string p = baseDir.EndsWith("opencode", StringComparison.OrdinalIgnoreCase)
-                ? baseDir
-                : Path.Combine(baseDir, "opencode");
-            sysTargets.Add((p, Directory.Exists(p) || File.Exists(p)));
-        }
+        foreach (string baseDir in HostGuardPaths())
+            sysTargets.Add((baseDir, Directory.Exists(baseDir) || File.Exists(baseDir)));
 
         int code;
         s_dataRoot = data;
@@ -211,6 +195,7 @@ internal static class PortableRun
                 foreach (string r in remaining.Take(10))
                     Console.Error.WriteLine("  " + r);
             }
+            int guardRemoved = 0, guardFailed = 0;
             foreach (var (path, existed) in sysTargets)
             {
                 try
@@ -221,12 +206,18 @@ internal static class PortableRun
                     if (existed || (!Directory.Exists(path) && !File.Exists(path))) continue;
                     DateTime created;
                     try { created = Directory.Exists(path) ? Directory.GetCreationTime(path) : File.GetCreationTime(path); }
-                    catch { continue; }
+                    catch { guardFailed++; continue; }
                     if (created < runStart.AddMinutes(-1)) continue;
                     DeletePath(path);
+                    // Never silent: a failed guard delete is reported (and can
+                    // be retried with --clean-host, which covers these paths).
+                    if (Directory.Exists(path) || File.Exists(path)) guardFailed++;
+                    else guardRemoved++;
                 }
-                catch { }
+                catch { guardFailed++; }
             }
+            if (guardFailed > 0)
+                Console.Error.WriteLine($"[opencode-portable] ATTENZIONE: guard non pulito ({guardFailed} path): rilancia con --clean-host.");
         }
         return code;
     }
@@ -337,6 +328,35 @@ internal static class PortableRun
         {
             try { Directory.Delete(baseDir, recursive: true); } catch { }
         }
+    }
+
+    /// <summary>
+    /// Host locations the guard snapshots (and --clean-host sweeps): the exact
+    /// `opencode` dirs where a child ignoring our redirects could still write.
+    /// Single source of truth shared by Execute and CleanHostTraces.
+    /// </summary>
+    internal static List<string> HostGuardPaths()
+    {
+        var paths = new List<string>();
+        string? userProfile = Environment.GetEnvironmentVariable("USERPROFILE");
+        var bases = new List<string?>();
+        bases.Add(Environment.GetEnvironmentVariable("TEMP"));
+        bases.Add(Environment.GetEnvironmentVariable("LOCALAPPDATA"));
+        bases.Add(Environment.GetEnvironmentVariable("APPDATA"));
+        if (!string.IsNullOrEmpty(userProfile))
+        {
+            bases.Add(Path.Combine(userProfile, ".config"));
+            bases.Add(Path.Combine(userProfile, ".local", "share"));
+        }
+        foreach (string? baseDir in bases)
+        {
+            if (string.IsNullOrEmpty(baseDir)) continue;
+            string p = baseDir.EndsWith("opencode", StringComparison.OrdinalIgnoreCase)
+                ? baseDir
+                : Path.Combine(baseDir, "opencode");
+            if (!paths.Contains(p, StringComparer.OrdinalIgnoreCase)) paths.Add(p);
+        }
+        return paths;
     }
 
     private static void DeletePath(string path)

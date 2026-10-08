@@ -729,7 +729,8 @@ internal static class Program
 
     /// <summary>
     /// Removes our host-side traces: WER ReportArchive/ReportQueue entries from
-    /// supervised child crashes, watchdog telemetry leftovers, TEMP crash dir.
+    /// supervised child crashes, watchdog telemetry leftovers, TEMP crash dir,
+    /// and empty host-guard fossils (`opencode` dirs leaked by violent kills).
     /// Only paths carrying our names; reparse-safe (a planted link is removed
     /// itself, never followed); returns 0 even if some need elevation.
     /// </summary>
@@ -770,6 +771,25 @@ internal static class Program
             if (Directory.Exists(legacy)) candidates.Add(legacy);
         }
         catch { skipped++; }
+        // Host-guard paths: a violent kill (finally never runs) can leak an
+        // `opencode` dir the runtime guard would otherwise have removed. Exact
+        // dirs only, reparse-safe handling below. Safety: a NON-empty guard dir
+        // may belong to another opencode install (e.g. npm global) — only empty
+        // fossils are removed, the rest is reported for manual inspection.
+        foreach (string gp in PortableRun.HostGuardPaths())
+        {
+            try
+            {
+                if (Directory.Exists(gp) && Directory.GetFileSystemEntries(gp).Length > 0)
+                {
+                    skipped++;
+                    Console.Error.WriteLine("[clean-host] saltato (non vuota, ispeziona a mano): " + gp);
+                    continue;
+                }
+            }
+            catch { skipped++; continue; }
+            candidates.Add(gp);
+        }
         foreach (string p in candidates)
         {
             try
