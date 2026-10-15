@@ -39,6 +39,7 @@ Thumbs.db
 Desktop.ini
 .vs/
 .vscode/
+.serena/
 *.tmp
 *.bak
 *~
