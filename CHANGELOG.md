@@ -6,7 +6,7 @@ Only `v1.3.6` is published (tags `v1.3.1`–`v1.3.3` were removed, `v1.3.4`–`v
 stay as prior releases); older entries below are kept as change history. The
 `[v1.3.4]` section also consolidates the untagged `v1.3.3` work.
 
-## [Unreleased]
+## [v1.4.0] - 2026-10-15
 
 - Upstream bump: opencode `1.18.35` → `1.19.0` (last GitHub zip with
   login-free free tier; v2 free models require Zen login server-side
