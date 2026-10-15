@@ -23,7 +23,7 @@
 > tested** with this project: API keys are accepted per session but provider
 > setups are unverified.
 >
-> Tested with opencode `2.0.29` (snapshot version; setup scripts default to the pinned `UPSTREAM_VERSION`). v2 ships via npm tgz, not GitHub zip.
+> Tested with opencode `1.19.0` (snapshot version; setup scripts default to the pinned `UPSTREAM_VERSION`). v2 (`2.x`, npm tgz) stays opt-in via `-Version` for trials: its free tier needs Zen login server-side.
 
 ## Download
 
@@ -104,13 +104,13 @@ Download the binary for your OS into `bin/` (binaries are **not** committed to g
 ```powershell
 # Windows
 .\scripts\setup.ps1
-# optionally: .\scripts\setup.ps1 -Version 2.0.29
+# optionally: .\scripts\setup.ps1 -Version 1.19.0
 ```
 
 ```bash
 # Linux / macOS
 ./scripts/setup.sh
-# optionally: ./scripts/setup.sh --version 2.0.29
+# optionally: ./scripts/setup.sh --version 1.19.0
 ```
 
 Run it:

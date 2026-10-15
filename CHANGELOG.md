@@ -8,10 +8,12 @@ stay as prior releases); older entries below are kept as change history. The
 
 ## [Unreleased]
 
-- Upstream bump: opencode `1.18.35` → `2.0.29` (v2 ships via npm tgz,
-  not GitHub zip: `setup.*`/`publish-fat` download `cli-<target>-<version>.tgz`,
-  verify the sha256 pin, extract `package/bin/opencode(.exe)`; fat exe
-  re-zips it so the runtime stays zip-only).
+- Upstream bump: opencode `1.18.35` → `1.19.0` (last GitHub zip with
+  login-free free tier; v2 free models require Zen login server-side
+  (`FreeTierError` without it), so v2 stays opt-in only).
+- v2 plumbing (kept, opt-in): `setup.*`/`publish-fat` also handle
+  `2.x` via npm tgz (`cli-<target>-<version>.tgz`, re-zipped as payload
+  so the runtime stays zip-only); explicit `-Version 2.0.29` for trials.
 - Self-updater: explicit `--check-update` / `--update [--yes]` checks the
   portable's own GitHub releases, verifies `.sha256` fail-closed, stages
   `OpencodePortable.new.exe` + detached replace (running exe is locked),

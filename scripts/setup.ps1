@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # Download the matching upstream opencode binary into .\bin\
-# Usage: .\scripts\setup.ps1 [-Version 1.18.35]
+# Usage: .\scripts\setup.ps1 [-Version 1.19.0]
 # SPDX-License-Identifier: MIT
 param([string]$Version = "")
 

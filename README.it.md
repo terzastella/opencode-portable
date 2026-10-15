@@ -23,7 +23,7 @@
 > **non sono stati testati** con questo progetto: le API key si possono dare
 > al volo ma le configurazioni provider non sono verificate.
 >
-> Testato con opencode `2.0.29` (versione snapshot; gli script di setup usano `UPSTREAM_VERSION` pinnata). La v2 arriva da npm tgz, non da zip GitHub.
+> Testato con opencode `1.19.0` (versione snapshot; gli script di setup usano `UPSTREAM_VERSION` pinnata). La v2 (`2.x`, npm tgz) resta opt-in via `-Version` per prove: il suo free tier richiede login Zen lato server.
 
 ## Download
 
@@ -101,13 +101,13 @@ Scarica il binario per il tuo OS in `bin/` (i binari **non** sono committati su 
 ```powershell
 # Windows
 .\scripts\setup.ps1
-# oppure: .\scripts\setup.ps1 -Version 2.0.29
+# oppure: .\scripts\setup.ps1 -Version 1.19.0
 ```
 
 ```bash
 # Linux / macOS
 ./scripts/setup.sh
-# oppure: ./scripts/setup.sh --version 2.0.29
+# oppure: ./scripts/setup.sh --version 1.19.0
 ```
 
 Esegui:

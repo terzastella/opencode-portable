@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Download the matching upstream opencode binary into ./bin/
-# Usage: ./scripts/setup.sh [--version 1.18.35]
+# Usage: ./scripts/setup.sh [--version 1.19.0]
 # SPDX-License-Identifier: MIT
 set -euo pipefail
 
