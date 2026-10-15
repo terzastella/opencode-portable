@@ -254,7 +254,7 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 | `--check-update` | Controlla le nostre GitHub releases per un portable più nuovo; rete solo esplicita |
 | `--update [--yes]` | Scarica + verifica `.sha256` + staging nuovo portable (`.new.exe` + replace staccato); chiede conferma salvo `--yes` |
 | `--self-test` | Smoke test COM solo non-UI (istanzia + opzioni + check WER, mai `Show` — niente click umani) |
-| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-watchdog-hop`, `--test-detached`, `--test-junction`, `--test-midrun-delete`, `--test-race`, `--test-longpath`, `--test-update-parse`, `--test-update-verify` | Self-test interni, attivi solo con `OPENCODE_ENABLE_TESTFLAGS=1` (vedi sorgenti) |
+| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-watchdog-hop`, `--test-detached`, `--test-junction`, `--test-midrun-delete`, `--test-race`, `--test-longpath`, `--test-update-parse`, `--test-update-verify`, `--test-update-replace` | Self-test interni, attivi solo con `OPENCODE_ENABLE_TESTFLAGS=1` (vedi sorgenti) |
 | `--report-console <file>` | Sonda distacco, con gate come i test sopra |
 | `--has-payload` | Info sul payload incorporato; exit 0 se presente (usato da publish-fat) |
 | `--` | Tutto ciò che segue va a opencode così com'è, anche flag da launcher |

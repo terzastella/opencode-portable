@@ -258,7 +258,7 @@ For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pa
 | `--check-update` | Check our own GitHub releases for a newer portable; explicit network, else offline |
 | `--update [--yes]` | Download + `.sha256`-verify + stage new portable (`.new.exe` + detached replace); prompts unless `--yes` |
 | `--self-test` | Non-UI COM smoke test only (instantiate + options + WER-silenced check, never `Show` — needs no human click) |
-| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-watchdog-hop`, `--test-detached`, `--test-junction`, `--test-midrun-delete`, `--test-race`, `--test-longpath`, `--test-update-parse`, `--test-update-verify` | Built-in self-tests, gated behind `OPENCODE_ENABLE_TESTFLAGS=1` (see source) |
+| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-watchdog-hop`, `--test-detached`, `--test-junction`, `--test-midrun-delete`, `--test-race`, `--test-longpath`, `--test-update-parse`, `--test-update-verify`, `--test-update-replace` | Built-in self-tests, gated behind `OPENCODE_ENABLE_TESTFLAGS=1` (see source) |
 | `--report-console <file>` | Detachment probe, gated like the test flags above |
 | `--has-payload` | Report embedded payload info; exit 0 iff present (used by publish-fat) |
 | `--` | Everything after is forwarded to opencode verbatim, even launcher-like flags |

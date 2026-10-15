@@ -6,8 +6,9 @@ Windows app; the scripts cover scripted use and Linux/macOS.
 ## A. OpencodePortable.exe (Windows, recommended)
 
 One file to distribute (`dist/OpencodePortable.exe`, built with
-`scripts/publish-fat.ps1`). It is fully stateless: **nothing is ever written
-next to the exe**. Double-click flow:
+`scripts/publish-fat.ps1`). On a normal run it is fully stateless: **nothing
+is ever written next to the exe** (opt-in `--persist-auth` keeps an `auth/`
+dir, `--update` stages a `.new.exe` for the post-exit replace). Double-click flow:
 
 1. **Workspace selection** — a supervised child process shows the native
    folder picker (`--pick-folder` protocol: `PICK-OK:<path>` (0),
@@ -92,6 +93,10 @@ and `--update [--yes]` do:
   over after exit (a running Windows exe is locked).
 - Temp is deleted via `RobustDelete`; leftovers are reported and swept next
   run / via `--clean-host` (which now covers `opencode-portable-update-*`).
+- The helper spawn only proves the mover started, not that the swap landed:
+  a leftover `OpencodePortable.new.exe` next to the exe is reported at the
+  next launch and the replace is retried on exit (idempotent; manual fallback
+  — close all instances, rename by hand — is printed when staging).
 
 ## Auth note
 

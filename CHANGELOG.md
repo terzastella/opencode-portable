@@ -4,6 +4,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials onl
 
 ## [Unreleased]
 
+- Fix: `TryParseVer` hung forever on 2-component versions (loop length never
+  re-evaluated) — normalize deterministically + regression vectors.
+- Updater reliability: a stale `OpencodePortable.new.exe` (previous replace
+  did not complete) is reported at startup and retried on normal exit;
+  `--test-update-replace` covers detection + a real detached-helper swap.
 - Provenance: verify the upstream Sigstore release attestation
   (`gh attestation verify` with the in-toto release predicate — upstream does
   NOT use gh's SLSA default) in `setup.*`/`publish-fat` when the `gh` CLI
