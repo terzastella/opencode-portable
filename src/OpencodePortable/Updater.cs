@@ -217,21 +217,9 @@ internal static class Updater
                 Console.Error.WriteLine("[update] ERRORE: asset .sha256 mancante nella release, annullo (fail-closed).");
                 return 1;
             }
-            string actual;
-            try
+            if (!VerifyFileHash(tmpExe, expected, out _))
             {
-                using var sha = System.Security.Cryptography.SHA256.Create();
-                using var fs = File.OpenRead(tmpExe);
-                actual = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
-            }
-            catch
-            {
-                Console.Error.WriteLine("[update] ERRORE: hash non calcolabile, annullo.");
-                return 1;
-            }
-            if (expected.Length != 64 || actual != expected)
-            {
-                Console.Error.WriteLine("[update] ERRORE: hash non corrispondente, annullo (possibile manomissione).");
+                Console.Error.WriteLine("[update] ERRORE: hash non corrispondente o non verificabile, annullo (possibile manomissione).");
                 return 1;
             }
             var fi = new FileInfo(tmpExe);
@@ -485,6 +473,33 @@ internal static class Updater
         return 0;
     }
 
+    /// <summary>
+    /// Pure hash gate used by --update: true only when the file exists and its
+    /// SHA-256 matches a well-formed 64-hex-digit expectation. Every other
+    /// case (missing file, malformed/empty expectation, mismatch, I/O error)
+    /// is false — the caller fail-closes on false without distinguishing why.
+    /// </summary>
+    internal static bool VerifyFileHash(string path, string expectedHex, out string actualHex)
+    {
+        actualHex = "";
+        try
+        {
+            if (string.IsNullOrWhiteSpace(expectedHex)) return false;
+            expectedHex = expectedHex.Trim().ToLowerInvariant();
+            if (expectedHex.Length != 64) return false;
+            foreach (char ch in expectedHex)
+            {
+                bool hex = (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f');
+                if (!hex) return false;
+            }
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            using var fs = File.OpenRead(path);
+            actualHex = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
+            return actualHex == expectedHex;
+        }
+        catch { return false; }
+    }
+
     public static int TestUpdateVerify()
     {
         string baseDir = Path.Combine(Path.GetTempPath(), "opencode-testupdate-" + Guid.NewGuid().ToString("N"));
@@ -493,12 +508,32 @@ internal static class Updater
             Directory.CreateDirectory(baseDir);
             string f = Path.Combine(baseDir, "fake.exe");
             File.WriteAllBytes(f, new byte[1024]);
-            string hash;
+            string good;
             using (var sha = System.Security.Cryptography.SHA256.Create())
             using (var fs = File.OpenRead(f))
-                hash = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
-            Console.WriteLine($"[test-update-verify] hash={hash} len={hash.Length}");
-            bool ok = hash.Length == 64;
+                good = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
+            string bad = good[..63] + (good[63] == '0' ? '1' : '0');
+            var cases = new (string path, string expect, bool want)[]
+            {
+                (f, good, true),                                   // exact match
+                (f, good.ToUpperInvariant(), true),                // case-insensitive
+                (f, "  " + good + "\n", true),                     // surrounding whitespace
+                (f, bad, false),                                   // single-char mismatch
+                (f, new string('0', 64), false),                   // well-formed, wrong value
+                (f, good[..32], false),                            // truncated
+                (f, good + "00", false),                           // too long
+                (f, "zz" + good[2..], false),                      // non-hex chars
+                (f, "", false),                                     // empty
+                (f, "   ", false),                                  // whitespace only
+                (Path.Combine(baseDir, "missing.exe"), good, false), // missing file
+            };
+            bool ok = true;
+            foreach (var (path, expect, want) in cases)
+            {
+                bool got = VerifyFileHash(path, expect, out string actual);
+                Console.WriteLine($"[test-update-verify] want={want} got={got} actual={actual}");
+                if (got != want) ok = false;
+            }
             Console.WriteLine(ok ? "[test-update-verify] OK" : "[test-update-verify] FALLITO");
             return ok ? 0 : 1;
         }
