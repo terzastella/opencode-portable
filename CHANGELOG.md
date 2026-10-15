@@ -4,6 +4,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials onl
 
 ## [Unreleased]
 
+## [v1.4.1] - 2026-10-15
+
 - Fix: `TryParseVer` hung forever on 2-component versions (loop length never
   re-evaluated) — normalize deterministically + regression vectors.
 - Updater reliability: a stale `OpencodePortable.new.exe` (previous replace
@@ -28,7 +30,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials onl
 - Updater: pure `VerifyFileHash` gate with negative tests (wrong/malformed/
   missing hash, missing file).
 Upstream opencode stays at `1.19.0` (see `UPSTREAM_VERSION`) unless noted.
-Only `v1.4.0` is published (tags `v1.3.1`–`v1.3.3` were removed, `v1.3.4`–`v1.3.5`
+Only `v1.4.1` is published (tags `v1.3.1`–`v1.3.3` were removed, `v1.3.4`–`v1.3.5`
 stay as prior releases); older entries below are kept as change history. The
 `[v1.3.4]` section also consolidates the untagged `v1.3.3` work.
 
