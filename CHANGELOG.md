@@ -17,8 +17,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials onl
 - Wording: "zero traces" softened to cleanup-with-scope in hero, checklist and
   scope notes (EN+IT); behavior unchanged.
 - Docs: new `docs/FIELD-TESTS.md` field-test matrix for VM runs.
-Upstream opencode stays at `1.18.35` (see `UPSTREAM_VERSION`) unless noted.
-Only `v1.3.6` is published (tags `v1.3.1`–`v1.3.3` were removed, `v1.3.4`–`v1.3.5`
+- Sweeper init race: per-run roots younger than 30 s without a verifiable
+  lock are never swept (concurrent sibling mid-initialization) + `--test-sweep-grace`.
+- `setup.sh`: SHA-256 via `sha256sum` with `shasum -a 256` fallback (macOS),
+  loud warning when no tool exists instead of silently skipping verification.
+- `publish-fat.ps1`: fail when a recorded pin changes without explicit
+  `-AllowPinRotation` (upstream re-cut or tampering).
+- Version rule unified (`setup.*`, `publish-fat`): empty = pinned (fail-closed
+  without a valid pin); `latest` = truly resolve upstream; numeric = exactly that.
+- Updater: pure `VerifyFileHash` gate with negative tests (wrong/malformed/
+  missing hash, missing file).
+Upstream opencode stays at `1.19.0` (see `UPSTREAM_VERSION`) unless noted.
+Only `v1.4.0` is published (tags `v1.3.1`–`v1.3.3` were removed, `v1.3.4`–`v1.3.5`
 stay as prior releases); older entries below are kept as change history. The
 `[v1.3.4]` section also consolidates the untagged `v1.3.3` work.
 
