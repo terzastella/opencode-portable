@@ -80,9 +80,10 @@ New-Item -ItemType Directory -Path $Tmp | Out-Null
 try {
   $Archive = Join-Path $Tmp $FileName
   $headers = @{}
-  # Authenticated rate limits for CI (60 req/h anonymous): honor GITHUB_TOKEN.
-  # Header-only (never argv): the token stays in-process, invisible to `ps`.
-  if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)" }
+  # Authenticated rate limits for CI (60 req/h anonymous): honor GITHUB_TOKEN,
+  # but ONLY for github.com — never send it to third parties (npm registry).
+  $sendToken = ($Url -like "*github.com*") -and ($env:GITHUB_TOKEN)
+  if ($sendToken) { $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)" }
   # Retry + timeout like publish-fat (5.1-compatible: -UseBasicParsing avoids
   # the IE parser hang on Windows PowerShell 5.1).
   $downloaded = $false

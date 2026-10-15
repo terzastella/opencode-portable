@@ -63,16 +63,22 @@ internal static class Updater
         catch { return false; }
     }
 
-    private static HttpClient MakeClient()
+    private static HttpClient MakeClient(bool withAuth = true)
     {
         var h = new HttpClientHandler { AllowAutoRedirect = true };
         var c = new HttpClient(h) { Timeout = TimeSpan.FromSeconds(30) };
         c.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
         c.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-        string? tok = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
-        if (!string.IsNullOrEmpty(tok))
-            c.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tok);
+        // Bearer token (rate limits) only where needed: the API call. Download
+        // URLs redirect to CDN hosts — HttpClient forwards Authorization
+        // across redirect hosts, so downloads use an unauthenticated client.
+        if (withAuth)
+        {
+            string? tok = Environment.GetEnvironmentVariable("GITHUB_TOKEN");
+            if (!string.IsNullOrEmpty(tok))
+                c.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", tok);
+        }
         return c;
     }
 
@@ -270,7 +276,9 @@ internal static class Updater
         {
             try
             {
-                using var c = MakeClient();
+                // Unauthenticated on purpose (see MakeClient): release-asset
+                // URLs redirect to CDN hosts and the token must not follow.
+                using var c = MakeClient(withAuth: false);
                 using var resp = c.GetAsync(url).GetAwaiter().GetResult();
                 if (!resp.IsSuccessStatusCode)
                 {
