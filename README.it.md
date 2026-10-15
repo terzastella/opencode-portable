@@ -4,7 +4,7 @@
 
 <h1 align="center">Opencode Portable</h1>
 
-<p align="center">Esegui <a href="https://github.com/anomalyco/opencode">opencode</a> come vera app portatile su <b>Windows 10 / 11</b>: doppio-click, scegli la cartella, lavora.<br>Chiudila — uscita, X, Ctrl+C, persino kill da Task Manager — e l'app rimuove i suoi file, best-effort entro i timeout (verificabile con la checklist sotto; <a href="#verifica-zero-tracce">nota sui limiti OS</a>).</p>
+<p align="center">Esegui <a href="https://github.com/anomalyco/opencode">opencode</a> come vera app portatile su <b>Windows 10 / 11</b>: doppio-click, scegli la cartella, lavora.<br>Chiudila — uscita, X, Ctrl+C, persino kill da Task Manager — e l'app rimuove i suoi file, best-effort entro i timeout (verificabile con la checklist sotto; <a href="#verifica-pulizia">nota sui limiti OS</a>).</p>
 
 <p align="center">
   <a href="README.md"><img src="https://img.shields.io/badge/English-read-lightgrey" alt="English"></a>
@@ -58,7 +58,7 @@ if ((Get-FileHash OpencodePortable.exe -Algorithm SHA256).Hash.ToLower() -ne (Ge
 | Niente login oggi | I free al momento vanno anonimi (upstream li ha bloccati una volta via `FreeTierError` — backup: login Zen una-tantum, gli script lo tengono in `data/`, l'exe lo cancella salvo `--persist-auth`, oppure `OPENCODE_API_KEY` al volo, mai salvata) |
 | Istanze concorrenti | Ognuna ha la sua cartella — niente condivisioni, niente lock |
 
-## Verifica zero tracce
+## Verifica pulizia
 
 Dopo un run, controlla che non resti nulla:
 
@@ -231,7 +231,7 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 - **Aggiornamenti**: opencode non si auto-aggiorna (`autoupdate: false`); ogni release portable fissa la sua versione nel file `UPSTREAM_VERSION` al build. Per una nuova upstream scarica la nuova release portable — oppure `OpencodePortable.exe --check-update` / `--update [--yes]` per auto-aggiornare il portable (controlla le nostre GitHub releases, verifica `.sha256` fail-closed, staging `.new.exe` + replace staccato; i run normali restano offline).
 - **CI**: ogni push/PR compila su Windows e lancia la suite di self-test (badge stato qui sopra; i tag eseguono un job `fat` completo in più).
 - **Niente Windows Error Reporting (solo launcher + picker)**: l'exe silenzia il WER per i propri crash (compresi gli AV supervisionati del picker) così nulla finisce in `ReportArchive`; un crash nativo del payload `opencode` invece viene comunque riportato al WER (immagine separata) — `--clean-host` non li copre. La diagnostica resta nei nostri `crash-*.log` (`<root>/state/` di norma, `%TEMP%\opencode-portable-crash-*/` solo se il crash avviene prima che un workspace sia noto, spazzati dopo 7 giorni; ultimi 5 conservati, identità oscurata: percorsi profilo/TEMP, username, dominio, hostname). `--clean-host` rimuove le nostre tracce host-side (vecchi archivi WER, telemetria watchdog, dir crash TEMP) — per i preesistenti può servire admin.
-- **Limiti di "zero tracce"**: rimuove i file applicativi e gli artefatti runtime noti (verificabile con la checklist sotto). **Non** è anti-tracciamento forense: telemetria OS/sicurezza fuori dal nostro controllo (Prefetch, Amcache/Shimcache, BAM, JumpLists/Recent, Defender/SmartScreen, USN Journal, pagefile/hiberfil, cronologia shell, scrollback console, log antivirus) non è rimovibile da nessuna app portable. Preferisci `--workspace <dir>` al drag-and-drop (i percorsi digitati restano nella cronologia PSReadLine e nello scrollback).
+- **Limiti della pulizia**: rimuove i file applicativi e gli artefatti runtime noti (verificabile con la checklist sotto). **Non** è anti-tracciamento forense: telemetria OS/sicurezza fuori dal nostro controllo (Prefetch, Amcache/Shimcache, BAM, JumpLists/Recent, Defender/SmartScreen, USN Journal, pagefile/hiberfil, cronologia shell, scrollback console, log antivirus) non è rimovibile da nessuna app portable. Preferisci `--workspace <dir>` al drag-and-drop (i percorsi digitati restano nella cronologia PSReadLine e nello scrollback).
 
 </details>
 
@@ -270,16 +270,19 @@ Flusso script: modifica `config/opencode.json` (default: `autoupdate: false`, `s
 
 Flusso exe: config **effimera per run** (`<root>/config/opencode.json`, dal template accanto all'exe o dal default incorporato), cancellata all'uscita con tutto il resto.
 
-Nota: questo progetto punta ai modelli free integrati di opencode — niente login,
-niente provider esterni da collegare. Login/auth non persistono mai per l'exe
-(root fresca a ogni run); eventuali API key di altri modelli si danno al volo,
-mai salvate (vedi [HOW-IT-WORKS](docs/HOW-IT-WORKS.md) § Auth note).
+Nota: questo progetto punta ai modelli free integrati di opencode, che al
+momento vanno senza login (upstream li ha bloccati una volta lato server e
+potrebbe rifarlo). Login/auth persistono per gli script (`data/`) ma mai per
+l'exe (root fresca a ogni run) salvo opt-in con `--persist-auth`; eventuali
+API key di altri modelli si danno al volo, mai salvate
+(vedi [HOW-IT-WORKS](docs/HOW-IT-WORKS.md) § Auth note).
 
 </details>
 
 ## Documentazione
 
 Architettura completa: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (in inglese).
+Matrice prove sul campo: [docs/FIELD-TESTS.md](docs/FIELD-TESTS.md) (in inglese, da compilare nelle run in VM).
 
 ## Licenza
 

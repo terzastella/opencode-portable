@@ -37,8 +37,8 @@ updates — download the newest `OpencodePortable.exe` from
   you revoke the key from `opencode.ai/console`. `--forget-auth` wipes it.
 - Lost or stolen media means lost credentials: BitLocker-encrypt portable
   drives and dismount them; EFS is not portable across machines.
-- "Zero traces" means application files and known runtime artifacts are
-  removed (see README checklist). It is **not** forensic anti-tracking: OS and
+- "Cleanup" removes application files and known runtime artifacts
+  (see README checklist). It is **not** forensic anti-tracking: OS and
   security telemetry (Prefetch, Defender/SmartScreen, USN Journal, shell
   history, antivirus logs) cannot be removed by any portable app.
 - No login or credentials are stored by the launcher itself, except the

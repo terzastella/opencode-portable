@@ -1,6 +1,17 @@
 # Changelog
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials only).
+
+## [Unreleased]
+
+- Provenance: verify the upstream Sigstore release attestation
+  (`gh attestation verify` with the in-toto release predicate — upstream does
+  NOT use gh's SLSA default) in `setup.*`/`publish-fat` when the `gh` CLI
+  exists: fail-closed on crypto failure, graceful warn when no attestation is
+  published or `gh` is missing. The hash pin remains the always-enforced control.
+- Wording: "zero traces" softened to cleanup-with-scope in hero, checklist and
+  scope notes (EN+IT); behavior unchanged.
+- Docs: new `docs/FIELD-TESTS.md` field-test matrix for VM runs.
 Upstream opencode stays at `1.18.35` (see `UPSTREAM_VERSION`) unless noted.
 Only `v1.3.6` is published (tags `v1.3.1`–`v1.3.3` were removed, `v1.3.4`–`v1.3.5`
 stay as prior releases); older entries below are kept as change history. The

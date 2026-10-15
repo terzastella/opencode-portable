@@ -4,7 +4,7 @@
 
 <h1 align="center">Opencode Portable</h1>
 
-<p align="center">Run <a href="https://github.com/anomalyco/opencode">opencode</a> as a truly portable app on <b>Windows 10 / 11</b>: double-click, pick a folder, work.<br>Close it — quit, X, Ctrl+C, even Task Manager kill — and the app removes its own files, best-effort within timeouts (verified with the checklist below; <a href="#verify-zero-traces">scope note on OS telemetry</a>).</p>
+<p align="center">Run <a href="https://github.com/anomalyco/opencode">opencode</a> as a truly portable app on <b>Windows 10 / 11</b>: double-click, pick a folder, work.<br>Close it — quit, X, Ctrl+C, even Task Manager kill — and the app removes its own files, best-effort within timeouts (verified with the checklist below; <a href="#verify-cleanup">scope note on OS telemetry</a>).</p>
 
 <p align="center">
   <a href="README.md"><img src="https://img.shields.io/badge/English-selected-blue" alt="English"></a>
@@ -61,7 +61,7 @@ if ((Get-FileHash OpencodePortable.exe -Algorithm SHA256).Hash.ToLower() -ne (Ge
 | No login needed today | Free models currently work anonymously (upstream gated them once via `FreeTierError` — backup: one-time Zen login, scripts persist it in `data/`, exe wipes it unless `--persist-auth`, or `OPENCODE_API_KEY` per session, never stored) |
 | Concurrent runs | Each run gets its own folder — no sharing, no locks |
 
-## Verify zero traces
+## Verify cleanup
 
 After a run, check nothing was left behind:
 
@@ -235,7 +235,7 @@ For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pa
 - **Updates**: opencode itself never auto-updates (`autoupdate: false`); each portable release pins its opencode version in `UPSTREAM_VERSION` at build time (`publish-fat` uses the file unless `-Version` overrides it, then embeds + hashes it). To get a new upstream, download the new portable release — or run `OpencodePortable.exe --check-update` / `--update [--yes]` to self-update the portable (checks our own GitHub releases, verifies `.sha256` fail-closed, stages `.new.exe` + detached replace; normal runs stay offline).
 - **CI**: every push/PR builds on Windows and runs the self-test suite (status badge above; tags run an extra full-payload `fat` job).
 - **No Windows Error Reporting (launcher + picker only)**: the exe silences WER for its own crashes (including supervised picker-child AVs) so nothing lands in `ReportArchive`; a native crash of the `opencode` payload itself still reports to WER (separate image, default error mode) — `--clean-host` does not cover those. Diagnostics stay in our own `crash-*.log` (`<root>/state/` normally, `%TEMP%\opencode-portable-crash-*/` only if crashing before any workspace is known, swept after 7 days; last 5 kept, identity scrubbed: profile/TEMP paths, username, domain, hostname). `--clean-host` removes our host-side traces (old WER archives, watchdog telemetry leftovers, TEMP crash dir) — pre-existing archives may need admin.
-- **"Zero traces" scope**: this removes application-created files and known runtime artifacts (verified with the checklist below). It is **not** forensic anti-tracking: OS/security telemetry outside our control (Prefetch, Amcache/Shimcache, BAM, JumpLists/Recent, Defender/SmartScreen telemetry, USN Journal, pagefile/hiberfil, shell history, console scrollback, antivirus logs) cannot be removed by any portable app. Prefer `--workspace <dir>` over drag-and-drop (typed paths persist in PSReadLine history and scrollback).
+- **Cleanup scope**: this removes application-created files and known runtime artifacts (verified with the checklist below). It is **not** forensic anti-tracking: OS/security telemetry outside our control (Prefetch, Amcache/Shimcache, BAM, JumpLists/Recent, Defender/SmartScreen telemetry, USN Journal, pagefile/hiberfil, shell history, console scrollback, antivirus logs) cannot be removed by any portable app. Prefer `--workspace <dir>` over drag-and-drop (typed paths persist in PSReadLine history and scrollback).
 
 </details>
 
@@ -274,16 +274,19 @@ Scripts flow: edit `config/opencode.json` (defaults: `autoupdate: false`, `share
 
 Exe flow: the config is **ephemeral per run** (`<root>/config/opencode.json`, from the template next to the exe or the embedded default) and deleted on exit with everything else.
 
-Note: this project targets opencode's built-in free models only — no login, no
-external providers to connect. Login/auth state never persists for the exe
-(fresh root every run); provider API keys, if you ever need other models, are
-typed per session, never stored (see [HOW-IT-WORKS](docs/HOW-IT-WORKS.md) § Auth note).
+Note: this project targets opencode's built-in free models, which currently
+work with no login (upstream gated them server-side once and may do it again).
+Login/auth state persists for script launchers (`data/`) but never for the exe
+(fresh root every run) unless you opt in with `--persist-auth`; provider API
+keys, if you ever need other models, are typed per session, never stored
+(see [HOW-IT-WORKS](docs/HOW-IT-WORKS.md) § Auth note).
 
 </details>
 
 ## Docs
 
 Full architecture: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (English).
+Field-test matrix: [docs/FIELD-TESTS.md](docs/FIELD-TESTS.md) (fill in with VM runs).
 
 ## License
 
