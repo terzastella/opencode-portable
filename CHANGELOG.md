@@ -8,6 +8,17 @@ stay as prior releases); older entries below are kept as change history. The
 
 ## [Unreleased]
 
+- Upstream bump: opencode `1.18.35` → `2.0.29` (v2 ships via npm tgz,
+  not GitHub zip: `setup.*`/`publish-fat` download `cli-<target>-<version>.tgz`,
+  verify the sha256 pin, extract `package/bin/opencode(.exe)`; fat exe
+  re-zips it so the runtime stays zip-only).
+- Self-updater: explicit `--check-update` / `--update [--yes]` checks the
+  portable's own GitHub releases, verifies `.sha256` fail-closed, stages
+  `OpencodePortable.new.exe` + detached replace (running exe is locked),
+  temp in unique host-TEMP dir swept next run / via `--clean-host`.
+  Normal runs stay offline: no network unless you ask.
+- Portable version `1.3.6` → `1.4.0`.
+
 ## [v1.3.6]
 
 - Guard reporting: host-guard delete failures are reported (never silent) with

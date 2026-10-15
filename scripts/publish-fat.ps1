@@ -44,51 +44,100 @@ if ($Version -eq "" -or $Version -eq "latest") {
     $Version = $pinned
     Step "using pinned upstream v$Version (from UPSTREAM_VERSION; -Version overrides)."
   } else {
-    Step "resolving latest release (no valid UPSTREAM_VERSION pin)..."
-    $rel = $null
-    for ($i = 1; $i -le 3 -and $null -eq $rel; $i++) {
-      try { $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers $headers -TimeoutSec 60 }
+    Step "resolving latest cli (npm metadata, no valid UPSTREAM_VERSION pin)..."
+    $meta = $null
+    for ($i = 1; $i -le 3 -and $null -eq $meta; $i++) {
+      try { $meta = Invoke-RestMethod -Uri "https://opencode.ai/update/api/latest/cli/npm" -TimeoutSec 30 }
       catch { if ($i -eq 3) { throw }; Step "API retry $i/3..."; Start-Sleep 5 }
     }
-    $Version = ([string]$rel.tag_name).TrimStart('v')
-    if ($Version -eq "") { throw "could not resolve latest version." }
+    $Version = ([string]$meta.version).TrimStart('v')
+    if ($Version -eq "" -or $Version -notmatch '^\d+\.\d+\.\d+$') { throw "could not resolve latest version." }
   }
 } else {
   $Version = $Version.TrimStart('v')
 }
-$FileName = "opencode-windows-$Arch.zip"
-$Url = "https://github.com/$Repo/releases/download/v$Version/$FileName"
+$IsV2 = $Version -match '^2\.'
+if ($IsV2) {
+  $NpmPkg = "@opencode/cli-windows-$Arch"
+  $FileName = "cli-windows-$Arch-$Version.tgz"
+  $Url = "https://registry.npmjs.org/$NpmPkg/-/cli-windows-$Arch-$Version.tgz"
+} else {
+  $FileName = "opencode-windows-$Arch.zip"
+  $Url = "https://github.com/$Repo/releases/download/v$Version/$FileName"
+}
 Step "opencode v$Version ($Arch)"
 
 if (-not (Test-Path -LiteralPath $PayloadDir)) { New-Item -ItemType Directory -Path $PayloadDir | Out-Null }
+$DownloadTmp = Join-Path ([IO.Path]::GetTempPath()) ("opencode-payload-" + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $DownloadTmp | Out-Null
+$TgzHashRecord = ""
 try {
   # Remove any stale partial from an aborted run: never embed a corrupt zip.
   if (Test-Path -LiteralPath $PayloadZip) { Remove-Item -LiteralPath $PayloadZip -Force }
-  Step "downloading $FileName..."
+  $downloadTarget = $PayloadZip
+  $sendToken = ($Url -like "*github.com*") -and ($env:GITHUB_TOKEN)
+  if ($IsV2) {
+    # v2: download npm tgz aside, then re-zip the exe as payload (runtime stays zip).
+    $downloadTarget = Join-Path $DownloadTmp $FileName
+    Step "downloading $FileName (npm)..."
+  } else {
+    Step "downloading $FileName..."
+  }
   $downloaded = $false
   if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
     # curl: fast, retry built-in, no PowerShell progress pathology.
     # The token travels via --config on stdin (never argv): invisible to `ps`.
-    $curlBase = @('-fSL', '--retry', '3', '--retry-all-errors', '--connect-timeout', '30', '-o', $PayloadZip, $Url)
+    # Never send GITHUB_TOKEN to npmjs (third party): only github.com.
+    $curlBase = @('-fSL', '--retry', '3', '--retry-all-errors', '--connect-timeout', '30', '-o', $downloadTarget, $Url)
     for ($i = 1; $i -le 3 -and -not $downloaded; $i++) {
-      if ($env:GITHUB_TOKEN) {
+      if ($sendToken) {
         "header = `"Authorization: Bearer $($env:GITHUB_TOKEN)`"" | & curl.exe --config - @curlBase
       } else {
         & curl.exe @curlBase
       }
-      if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $PayloadZip)) { $downloaded = $true }
-      else { Step "download retry $i/3..."; Start-Sleep 5 }
+      if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $downloadTarget)) {
+        # v2 fallback: @opencode (current) -> @opencode-ai (legacy beta scope).
+        $downloaded = $true
+      }
+      else {
+        if ($IsV2 -and $Url -like "*@opencode/cli-windows*") {
+          $altUrl = $Url -replace "@opencode/cli-windows", "@opencode-ai/cli-windows"
+          Step "retry with legacy scope @opencode-ai..."
+          $curlAlt = @('-fSL', '--retry', '3', '--retry-all-errors', '--connect-timeout', '30', '-o', $downloadTarget, $altUrl)
+          & curl.exe @curlAlt
+          if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $downloadTarget)) { $downloaded = $true; $Url = $altUrl }
+          else { Step "download retry $i/3..."; Start-Sleep 5 }
+        } else { Step "download retry $i/3..."; Start-Sleep 5 }
+      }
     }
   }
   if (-not $downloaded) {
     for ($i = 1; $i -le 3 -and -not $downloaded; $i++) {
       try {
-        Invoke-WebRequest -Uri $Url -OutFile $PayloadZip -TimeoutSec 600 -Headers $headers
-        $downloaded = Test-Path -LiteralPath $PayloadZip
+        $reqHeaders = @{}
+        if ($sendToken) { $reqHeaders = $headers }
+        Invoke-WebRequest -Uri $Url -OutFile $downloadTarget -TimeoutSec 600 -Headers $reqHeaders
+        $downloaded = Test-Path -LiteralPath $downloadTarget
       } catch { if ($i -eq 3) { throw }; Step "download retry $i/3..."; Start-Sleep 5 }
     }
   }
   if (-not $downloaded) { throw "download failed after retries." }
+  if ($IsV2) {
+    # v2 npm tgz -> re-zip opencode.exe as payload (runtime extractor stays zip-only).
+    $TgzHashRecord = (Get-FileHash -LiteralPath $downloadTarget -Algorithm SHA256).Hash.ToLowerInvariant()
+    Step "tgz sha256: $TgzHashRecord"
+    $tgzTmp = Join-Path $DownloadTmp "tgz"
+    New-Item -ItemType Directory -Path $tgzTmp -Force | Out-Null
+    $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
+    if (-not $tar) { throw "tar.exe required for v2 tgz but not found." }
+    & tar.exe -xzf $downloadTarget -C $tgzTmp
+    if ($LASTEXITCODE -ne 0) { throw "tgz extraction failed." }
+    $exeHit = Get-ChildItem -LiteralPath $tgzTmp -Filter 'opencode.exe' -Recurse | Select-Object -First 1
+    if (-not $exeHit) { throw "no opencode.exe in npm tgz." }
+    if ($exeHit.Length -lt 10MB) { throw "npm opencode.exe suspiciously small, refusing embed." }
+    Step ("npm exe: {0:N1} MB, re-zipping as payload..." -f ($exeHit.Length / 1MB))
+    Compress-Archive -LiteralPath $exeHit.FullName -DestinationPath $PayloadZip -Force
+  }
   $zipSize = (Get-Item -LiteralPath $PayloadZip).Length
   Step ("payload: {0:N1} MB, verifying integrity..." -f ($zipSize / 1MB))
   # Integrity gate: a truncated zip must NEVER be embedded. Expand to temp and
@@ -119,8 +168,11 @@ try {
   # Committed pin (tracked): setup.* scripts fail closed against this for the
   # same version+arch instead of trusting TLS alone. Upsert our line, keep
   # other arches (recorded by their own publish runs).
+  # v1: pin = zip hash. v2: pin = npm tgz hash (what setup.* downloads).
   $PinFile = Join-Path $Root 'UPSTREAM_VERSION.sha256'
-  $pinLine = "windows-$Arch $Version $zipHashRecord"
+  $pinHash = $zipHashRecord
+  if ($IsV2 -and $TgzHashRecord -match '^[0-9a-f]{64}$') { $pinHash = $TgzHashRecord }
+  $pinLine = "windows-$Arch $Version $pinHash"
   $pins = @()
   if (Test-Path -LiteralPath $PinFile) { $pins = @(Get-Content -LiteralPath $PinFile | Where-Object { $_ -notmatch "^windows-$Arch\s+$Version\s+" -and $_.Trim() -ne "" }) }
   $pins += $pinLine
@@ -140,7 +192,10 @@ try {
   $exeHash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
   $exeHash | Set-Content -LiteralPath ($exe + '.sha256') -NoNewline
   # Minimal CycloneDX SBOM: ingredients list with versions, licenses, hashes.
+  # v1: upstream hash = zip hash. v2: upstream hash = npm tgz hash (pin file).
   $zipHash = (Get-FileHash -LiteralPath $PayloadZip -Algorithm SHA256).Hash.ToLowerInvariant()
+  $upstreamHash = $zipHash
+  if ($IsV2 -and $TgzHashRecord -match '^[0-9a-f]{64}$') { $upstreamHash = $TgzHashRecord }
   $appVersion = ([regex]::Match((Get-Content -LiteralPath (Join-Path $Root 'src\OpencodePortable\OpencodePortable.csproj') -Raw), '<Version>([^<]+)</Version>').Groups[1].Value).Trim()
   if ($appVersion -eq "") { $appVersion = "0.0.0-unknown" }
   $sdkLine = (& dotnet --list-runtimes 2>$null | Where-Object { $_ -like 'Microsoft.NETCore.App 10.*' } | Select-Object -First 1)
@@ -157,7 +212,7 @@ try {
     components = @(
       [ordered]@{
         type = "application"; name = "opencode (upstream embedded payload)"; version = $Version
-        hashes = @([ordered]@{ alg = "SHA-256"; content = $zipHash })
+        hashes = @([ordered]@{ alg = "SHA-256"; content = $upstreamHash })
         licenses = @([ordered]@{ license = [ordered]@{ id = "MIT" } })
         externalReferences = @([ordered]@{ type = "distribution"; url = $Url })
       },
@@ -172,11 +227,14 @@ try {
   Step ("OK -> {0} ({1:N1} MB, payload v{2} embedded)" -f $exe, ($exeSize / 1MB), $Version)
   Step ("artifacts: exe + .sha256 + .cdx.json in {0}" -f $OutDir)
 } finally {
-  # Remove only what we downloaded (.zip + .sha256); never wipe a pre-existing payload dir.
+  # Remove only what we downloaded/created (.zip + .sha256 + tgz tmp); never wipe a pre-existing payload dir.
   foreach ($f in @($PayloadZip, (Join-Path $PayloadDir 'opencode.zip.sha256'))) {
     if (Test-Path -LiteralPath $f) {
       Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
     }
+  }
+  if (Test-Path -LiteralPath $DownloadTmp) {
+    Remove-Item -LiteralPath $DownloadTmp -Recurse -Force -ErrorAction SilentlyContinue
   }
   Step "staging pulita."
 }

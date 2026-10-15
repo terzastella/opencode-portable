@@ -315,6 +315,7 @@ internal static class Program
             }
         }
         catch { }
+        try { Updater.SweepUpdateTemp(); } catch { }
         // The exe is stateless: NOTHING is ever written next to it. Everything
         // (config, cache, state, tmp, binary) lives inside the selected workspace
         // under .opencode-portable, so deleting the workspace removes all traces.
@@ -484,6 +485,27 @@ internal static class Program
                 }
                 Console.WriteLine($"[opencode-portable] payload OK: {resName} ({res.Length} bytes)");
                 return 0;
+            }
+            if (args[i] == "--check-update")
+            {
+                return Updater.CheckUpdate();
+            }
+            if (args[i] == "--update")
+            {
+                bool yes = false;
+                if (i + 1 < args.Length && (args[i + 1] == "--yes" || args[i + 1] == "-y"))
+                { yes = true; i++; }
+                return Updater.Update(yes);
+            }
+            if (args[i] == "--test-update-parse")
+            {
+                if (!TestsEnabled()) return 1;
+                return Updater.TestUpdateParse();
+            }
+            if (args[i] == "--test-update-verify")
+            {
+                if (!TestsEnabled()) return 1;
+                return Updater.TestUpdateVerify();
             }
             if (args[i] == "--clean")
             {
@@ -730,7 +752,8 @@ internal static class Program
     /// <summary>
     /// Removes our host-side traces: WER ReportArchive/ReportQueue entries from
     /// supervised child crashes, watchdog telemetry leftovers, TEMP crash dir,
-    /// and empty host-guard fossils (`opencode` dirs leaked by violent kills).
+    /// update download leftovers, and empty host-guard fossils (`opencode` dirs
+    /// leaked by violent kills).
     /// Only paths carrying our names; reparse-safe (a planted link is removed
     /// itself, never followed); returns 0 even if some need elevation.
     /// </summary>
@@ -766,6 +789,8 @@ internal static class Program
         {
             // Current per-incident dirs plus the legacy fixed name, if any.
             foreach (string d in Directory.GetDirectories(tmp, "opencode-portable-crash-*"))
+                candidates.Add(d);
+            foreach (string d in Directory.GetDirectories(tmp, "opencode-portable-update-*"))
                 candidates.Add(d);
             string legacy = Path.Combine(tmp, "opencode-portable");
             if (Directory.Exists(legacy)) candidates.Add(legacy);

@@ -23,7 +23,7 @@
 > tested** with this project: API keys are accepted per session but provider
 > setups are unverified.
 >
-> Tested with opencode `1.18.35` (snapshot version; setup scripts default to the pinned `UPSTREAM_VERSION`).
+> Tested with opencode `2.0.29` (snapshot version; setup scripts default to the pinned `UPSTREAM_VERSION`). v2 ships via npm tgz, not GitHub zip.
 
 ## Download
 
@@ -104,13 +104,13 @@ Download the binary for your OS into `bin/` (binaries are **not** committed to g
 ```powershell
 # Windows
 .\scripts\setup.ps1
-# optionally: .\scripts\setup.ps1 -Version 1.18.35
+# optionally: .\scripts\setup.ps1 -Version 2.0.29
 ```
 
 ```bash
 # Linux / macOS
 ./scripts/setup.sh
-# optionally: ./scripts/setup.sh --version 1.18.35
+# optionally: ./scripts/setup.sh --version 2.0.29
 ```
 
 Run it:
@@ -212,8 +212,8 @@ See [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) for details.
 
 `bin/`, `data/`, `dist/`, `src/**/payload|bin|obj` and local `config/opencode.json` are git-ignored. The repo ships **source only**:
 
-- `scripts/setup.ps1` → `opencode-windows-x64.zip` (or `-arm64`, auto-detected, WOW64-aware) from upstream releases
-- `scripts/setup.sh` → `opencode-linux-x64.tar.gz` / `opencode-darwin-arm64.zip`, etc. (fails fast on unsupported OS/arch)
+- `scripts/setup.ps1` → v1 `opencode-windows-x64.zip` (or `-arm64`, auto-detected, WOW64-aware) from upstream GitHub releases; v2 `cli-windows-x64-<ver>.tgz` (or `-arm64`) from npm registry (`@opencode`, fallback `@opencode-ai`), `package/bin/opencode.exe` extracted via tar
+- `scripts/setup.sh` → v1 `opencode-linux-x64.tar.gz` / `opencode-darwin-arm64.zip`, etc. (fails fast on unsupported OS/arch); v2 `cli-<os>-<arch>-<ver>.tgz` from npm, same fallback
 - If `bin/` is empty the launchers **refuse to run** (fail-closed): reusing `opencode` from `PATH` requires explicit opt-in (`--from-path` — stripped anywhere by exe/cmd, first-arg-only by ps1/sh — or `OPENCODE_ALLOW_PATH_FALLBACK=1`), and the resolved path is always printed. The exe prefers a bundled binary and only then looks at PATH.
 
 For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pack-release.sh` builds `opencode-portable-linux-macos.tar.gz`. Both secret-scan the content and never include `data/`, `bin/*` (except `.gitkeep`), `dist/` or local configs. The all-in-one exe itself (`dist/`) is never committed (~137 MiB / ~144 MB).
@@ -223,12 +223,12 @@ For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pa
 <details>
 <summary><b>Security notes</b></summary>
 
-- **Binaries are trusted upstream artifacts**: `setup.*` downloads and `publish-fat.ps1` embeds over HTTPS from GitHub releases. The embedded payload hash (SHA-256) is pinned at build time and re-verified before every extraction; `setup.*` additionally fail closed against the committed `UPSTREAM_VERSION.sha256` pin. Missing piece (no unilateral fix): upstream publishes no checksums/signatures of its own — if they ever do, verify against them.
+- **Binaries are trusted upstream artifacts**: `setup.*` downloads and `publish-fat.ps1` embeds over HTTPS (v1: GitHub releases zip; v2: npm registry tgz, re-zipped as payload). The embedded payload hash (SHA-256) is pinned at build time and re-verified before every extraction; `setup.*` additionally fail closed against the committed `UPSTREAM_VERSION.sha256` pin (v2 pin = tgz hash). Missing piece (no unilateral fix): v1 upstream publishes no checksums/signatures of its own — if they ever do, verify against them; v2 tgz carries npm `integrity` (sha512) plus our sha256 pin.
 - **Credentials live in `data/` (scripts) or `<workspace>/.opencode-portable-*/` (exe)** (auth tokens, API keys): never share or publish those folders, and never ship an archive containing them — `pack-release` excludes them by design. A lost USB stick means lost credentials. The per-run root inherits the workspace ACLs: on shared/synced folders others may read live credentials — use a local, single-user workspace for secret sessions.
 - **Downloaded files carry Mark-of-the-Web**: on other PCs Windows may block the `.ps1` launchers (execution policy) and SmartScreen may flag the unsigned exe. Verify the `.sha256` first, then use `opencode-portable.cmd`, or `Unblock-File`, after inspecting the content.
 - This wrapper isolates files, it does **not sandbox** opencode itself: an AI coding agent runs shell commands in your workspace — review what it does, as with any upstream install.
 - **Trust model**: the workspace is NOT a security boundary — use only folders you trust (no network shares, synced folders writable by others, or untrusted repos); anyone who can write the workspace can influence config, cache and extracted binaries. Same for `--from-path` / `OPENCODE_ALLOW_PATH_FALLBACK=1`: it bypasses the bundled-payload trust and runs whatever `opencode` is first in PATH — resolved path is always printed, hash it yourself if unsure.
-- **Updates**: no auto-update (`autoupdate: false`); each release pins its opencode version in `UPSTREAM_VERSION` at build time (`publish-fat` uses the file unless `-Version` overrides it, then embeds + hashes it). To update, bump the file and download the new release.
+- **Updates**: opencode itself never auto-updates (`autoupdate: false`); each portable release pins its opencode version in `UPSTREAM_VERSION` at build time (`publish-fat` uses the file unless `-Version` overrides it, then embeds + hashes it). To get a new upstream, download the new portable release — or run `OpencodePortable.exe --check-update` / `--update [--yes]` to self-update the portable (checks our own GitHub releases, verifies `.sha256` fail-closed, stages `.new.exe` + detached replace; normal runs stay offline).
 - **CI**: every push/PR builds on Windows and runs the self-test suite (status badge above; tags run an extra full-payload `fat` job).
 - **No Windows Error Reporting (launcher + picker only)**: the exe silences WER for its own crashes (including supervised picker-child AVs) so nothing lands in `ReportArchive`; a native crash of the `opencode` payload itself still reports to WER (separate image, default error mode) — `--clean-host` does not cover those. Diagnostics stay in our own `crash-*.log` (`<root>/state/` normally, `%TEMP%\opencode-portable-crash-*/` only if crashing before any workspace is known, swept after 7 days; last 5 kept, identity scrubbed: profile/TEMP paths, username, domain, hostname). `--clean-host` removes our host-side traces (old WER archives, watchdog telemetry leftovers, TEMP crash dir) — pre-existing archives may need admin.
 - **"Zero traces" scope**: this removes application-created files and known runtime artifacts (verified with the checklist below). It is **not** forensic anti-tracking: OS/security telemetry outside our control (Prefetch, Amcache/Shimcache, BAM, JumpLists/Recent, Defender/SmartScreen telemetry, USN Journal, pagefile/hiberfil, shell history, console scrollback, antivirus logs) cannot be removed by any portable app. Prefer `--workspace <dir>` over drag-and-drop (typed paths persist in PSReadLine history and scrollback).
@@ -248,9 +248,11 @@ For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pa
 | `--watch <pid> <ticks> <dir>` | Watchdog mode (spawned automatically, orphan hop) |
 | `--watch-hop <pid> <ticks> <dir>` | Internal hop: spawns the detached `--watch` grandchild and exits (do not call directly) |
 | `--clean <dir>` | Sweep stale roots without launching; errors on missing dir |
-| `--clean-host` | Remove own host traces (WER archives, watchdog telemetry, TEMP crash dir); always exit 0 |
+| `--clean-host` | Remove own host traces (WER archives, watchdog telemetry, TEMP crash/update dirs); always exit 0 |
+| `--check-update` | Check our own GitHub releases for a newer portable; explicit network, else offline |
+| `--update [--yes]` | Download + `.sha256`-verify + stage new portable (`.new.exe` + detached replace); prompts unless `--yes` |
 | `--self-test` | Non-UI COM smoke test only (instantiate + options + WER-silenced check, never `Show` — needs no human click) |
-| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-watchdog-hop`, `--test-detached`, `--test-junction`, `--test-midrun-delete`, `--test-race`, `--test-longpath` | Built-in self-tests, gated behind `OPENCODE_ENABLE_TESTFLAGS=1` (see source) |
+| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-watchdog-hop`, `--test-detached`, `--test-junction`, `--test-midrun-delete`, `--test-race`, `--test-longpath`, `--test-update-parse`, `--test-update-verify` | Built-in self-tests, gated behind `OPENCODE_ENABLE_TESTFLAGS=1` (see source) |
 | `--report-console <file>` | Detachment probe, gated like the test flags above |
 | `--has-payload` | Report embedded payload info; exit 0 iff present (used by publish-fat) |
 | `--` | Everything after is forwarded to opencode verbatim, even launcher-like flags |

@@ -8,7 +8,7 @@ updates — download the newest `OpencodePortable.exe` from
 
 | Version | Supported |
 |---|---|
-| latest (`v1.3.6`) | ✅ |
+| latest (`v1.4.0`) | ✅ |
 | older | ❌ |
 
 ## Scope — what this project is (and is not)
@@ -22,9 +22,14 @@ updates — download the newest `OpencodePortable.exe` from
   synced folder, other people may read live credentials. Never use
   shared/synced locations for sessions with secrets; prefer a local,
   single-user folder.
-- `--clean-host` removes our WER/watchdog/crash leftovers but may need admin
+- `--clean-host` removes our WER/watchdog/crash/update leftovers but may need admin
   for `%ProgramData%` archives; a standard user can only clean their own
   profile. Exit code stays 0 with a skipped count — read the output.
+- Self-updater (`--check-update` / `--update`) is explicit-only: normal runs
+  never use the network. Updates check our own portable releases over HTTPS,
+  verify the release `.sha256` fail-closed (missing/mismatch aborts), never
+  send tokens in argv, stage `.new.exe` for a detached replace (the running
+  exe is locked on Windows). Review the output before restarting.
 - Lost or stolen media means lost credentials: BitLocker-encrypt portable
   drives and dismount them; EFS is not portable across machines.
 - "Zero traces" means application files and known runtime artifacts are
@@ -59,7 +64,8 @@ updates — download the newest `OpencodePortable.exe` from
 | Trusts | Does NOT trust |
 |---|---|
 | Microsoft Windows 10/11 OS itself | Workspace contents (treat as untrusted input) |
-| Upstream GitHub releases over HTTPS + committed hash pin (`UPSTREAM_VERSION.sha256`, setup.* fail closed; upstream publishes no checksums of its own) | Binaries found in PATH (fail-closed, explicit opt-in) |
+| Upstream GitHub releases over HTTPS + committed hash pin (`UPSTREAM_VERSION.sha256`, setup.* fail closed; v1 upstream publishes no checksums of its own; v2 npm tgz adds registry `integrity` plus our pin) | Binaries found in PATH (fail-closed, explicit opt-in) |
+| Portable releases over HTTPS + release `.sha256` for self-update (`--update` only; normal runs offline) | Silent auto-update (there is none: explicit flags only) |
 | The user running it (their machine, their choice) | Other local users/processes (single-user oriented) |
 
 ## Verifying a download

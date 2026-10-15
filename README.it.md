@@ -23,7 +23,7 @@
 > **non sono stati testati** con questo progetto: le API key si possono dare
 > al volo ma le configurazioni provider non sono verificate.
 >
-> Testato con opencode `1.18.35` (versione snapshot; gli script di setup usano `UPSTREAM_VERSION` pinnata).
+> Testato con opencode `2.0.29` (versione snapshot; gli script di setup usano `UPSTREAM_VERSION` pinnata). La v2 arriva da npm tgz, non da zip GitHub.
 
 ## Download
 
@@ -101,13 +101,13 @@ Scarica il binario per il tuo OS in `bin/` (i binari **non** sono committati su 
 ```powershell
 # Windows
 .\scripts\setup.ps1
-# oppure: .\scripts\setup.ps1 -Version 1.18.35
+# oppure: .\scripts\setup.ps1 -Version 2.0.29
 ```
 
 ```bash
 # Linux / macOS
 ./scripts/setup.sh
-# oppure: ./scripts/setup.sh --version 1.18.35
+# oppure: ./scripts/setup.sh --version 2.0.29
 ```
 
 Esegui:
@@ -208,8 +208,8 @@ Dettagli in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) (in inglese).
 
 `bin/`, `data/`, `dist/`, `src/**/payload|bin|obj` e `config/opencode.json` locale sono ignorati da git. La repo contiene **solo sorgenti**:
 
-- `scripts/setup.ps1` → `opencode-windows-x64.zip` (o `-arm64`, auto-detect, WOW64-aware) dalle release upstream
-- `scripts/setup.sh` → `opencode-linux-x64.tar.gz` / `opencode-darwin-arm64.zip`, ecc. (errore subito su OS/arch non supportati)
+- `scripts/setup.ps1` → v1 `opencode-windows-x64.zip` (o `-arm64`) dalle release GitHub upstream; v2 `cli-windows-x64-<ver>.tgz` dal registry npm (`@opencode`, fallback `@opencode-ai`), `package/bin/opencode.exe` via tar
+- `scripts/setup.sh` → v1 `opencode-linux-x64.tar.gz` / `opencode-darwin-arm64.zip`, ecc.; v2 `cli-<os>-<arch>-<ver>.tgz` da npm, stesso fallback
 - Se `bin/` è vuota i launcher **si rifiutano di partire** (fail-closed): riusare `opencode` da `PATH` richiede opt-in esplicito (`--from-path` — ovunque per exe/cmd, solo primo arg per ps1/sh — o `OPENCODE_ALLOW_PATH_FALLBACK=1`), e il percorso risolto viene sempre stampato. L'exe preferisce il binario incorporato e guarda il PATH solo se manca.
 
 Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-release.sh` fa `opencode-portable-linux-macos.tar.gz`. Entrambi scansionano i segreti e non includono mai `data/`, `bin/*` (tranne `.gitkeep`), `dist/` o config locali. L'exe all-in-one (`dist/`) non si committa mai (~137 MiB / ~144 MB).
@@ -219,12 +219,12 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 <details>
 <summary><b>Note di sicurezza</b></summary>
 
-- **I binari sono artefatti upstream fidati**: `setup.*` scarica e `publish-fat.ps1` incorpora via HTTPS dalle GitHub releases. L'hash SHA-256 del payload è incorporato al build e riverificato a ogni estrazione; `setup.*` in più rifiuta l'installazione se l'hash non coincide col pin committato (`UPSTREAM_VERSION.sha256`). Manca solo l'anchor indipendente (upstream non pubblica checksum/firme proprie — se mai lo farà, verificateli voi stessi).
+- **I binari sono artefatti upstream fidati**: `setup.*` scarica e `publish-fat.ps1` incorpora via HTTPS (v1: zip dalle GitHub releases; v2: tgz dal registry npm, re-zippato come payload). L'hash SHA-256 del payload è incorporato al build e riverificato a ogni estrazione; `setup.*` in più rifiuta l'installazione se l'hash non coincide col pin committato (`UPSTREAM_VERSION.sha256`, per v2 = hash del tgz). Upstream v1 non pubblica checksum/firme proprie; il tgz v2 ha `integrity` npm (sha512) più il nostro pin sha256.
 - **Le credenziali stanno in `data/` (script) o `<workspace>/.opencode-portable-*/` (exe)** (token auth, API key): non condividere né pubblicare quelle cartelle, e non distribuire archivi che le contengono — `pack-release` le esclude di proposito. Chiavetta persa = credenziali perse. La root per-run eredita gli ACL del workspace: su share/cartelle sincronizzate altri potrebbero leggere credenziali vive — per sessioni con segreti usa un workspace locale monoutente.
 - **I file scaricati hanno il Mark-of-the-Web**: su altri PC Windows può bloccare i launcher `.ps1` (execution policy) e SmartScreen può segnalare l'exe non firmato. Verifica lo `.sha256` prima, poi usa `opencode-portable.cmd`, o `Unblock-File`, dopo aver ispezionato il contenuto.
 - Questo wrapper isola i file, **non fa sandbox** di opencode: un AI coding agent esegue comandi shell nel tuo workspace — controlla cosa fa, come con qualsiasi installazione upstream.
 - **Modello di trust**: il workspace NON è un confine di sicurezza — usa solo cartelle fidate (niente share di rete, cartelle sincronizzate scrivibili da altri, o repo non attendibili); chi può scrivere il workspace può influenzare config, cache e binari estratti. Stesso discorso per `--from-path` / `OPENCODE_ALLOW_PATH_FALLBACK=1`: bypassa il trust del payload incorporato ed esegue il primo `opencode` nel PATH — il percorso viene sempre stampato, verificane l'hash se hai dubbi.
-- **Aggiornamenti**: nessun auto-update (`autoupdate: false`); ogni release fissa la sua versione di opencode nel file `UPSTREAM_VERSION` al build (`publish-fat` lo usa salvo `-Version` esplicita, poi incorpora + hash). Per aggiornare, cambia il file e scarica la nuova release.
+- **Aggiornamenti**: opencode non si auto-aggiorna (`autoupdate: false`); ogni release portable fissa la sua versione nel file `UPSTREAM_VERSION` al build. Per una nuova upstream scarica la nuova release portable — oppure `OpencodePortable.exe --check-update` / `--update [--yes]` per auto-aggiornare il portable (controlla le nostre GitHub releases, verifica `.sha256` fail-closed, staging `.new.exe` + replace staccato; i run normali restano offline).
 - **CI**: ogni push/PR compila su Windows e lancia la suite di self-test (badge stato qui sopra; i tag eseguono un job `fat` completo in più).
 - **Niente Windows Error Reporting (solo launcher + picker)**: l'exe silenzia il WER per i propri crash (compresi gli AV supervisionati del picker) così nulla finisce in `ReportArchive`; un crash nativo del payload `opencode` invece viene comunque riportato al WER (immagine separata) — `--clean-host` non li copre. La diagnostica resta nei nostri `crash-*.log` (`<root>/state/` di norma, `%TEMP%\opencode-portable-crash-*/` solo se il crash avviene prima che un workspace sia noto, spazzati dopo 7 giorni; ultimi 5 conservati, identità oscurata: percorsi profilo/TEMP, username, dominio, hostname). `--clean-host` rimuove le nostre tracce host-side (vecchi archivi WER, telemetria watchdog, dir crash TEMP) — per i preesistenti può servire admin.
 - **Limiti di "zero tracce"**: rimuove i file applicativi e gli artefatti runtime noti (verificabile con la checklist sotto). **Non** è anti-tracciamento forense: telemetria OS/sicurezza fuori dal nostro controllo (Prefetch, Amcache/Shimcache, BAM, JumpLists/Recent, Defender/SmartScreen, USN Journal, pagefile/hiberfil, cronologia shell, scrollback console, log antivirus) non è rimovibile da nessuna app portable. Preferisci `--workspace <dir>` al drag-and-drop (i percorsi digitati restano nella cronologia PSReadLine e nello scrollback).
@@ -244,9 +244,11 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 | `--watch <pid> <ticks> <dir>` | Modalità guardiano (avviata da sola, hop orfano) |
 | `--watch-hop <pid> <ticks> <dir>` | Hop interno: genera il nipote `--watch` staccato ed esce (non chiamare direttamente) |
 | `--clean <dir>` | Spazza le root stale senza avviare nulla; errore se manca la dir |
-| `--clean-host` | Rimuove le nostre tracce host (archivi WER, telemetria, dir crash TEMP); sempre exit 0 |
+| `--clean-host` | Rimuove le nostre tracce host (archivi WER, telemetria, dir crash/update TEMP); sempre exit 0 |
+| `--check-update` | Controlla le nostre GitHub releases per un portable più nuovo; rete solo esplicita |
+| `--update [--yes]` | Scarica + verifica `.sha256` + staging nuovo portable (`.new.exe` + replace staccato); chiede conferma salvo `--yes` |
 | `--self-test` | Smoke test COM solo non-UI (istanzia + opzioni + check WER, mai `Show` — niente click umani) |
-| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-watchdog-hop`, `--test-detached`, `--test-junction`, `--test-midrun-delete`, `--test-race`, `--test-longpath` | Self-test interni, attivi solo con `OPENCODE_ENABLE_TESTFLAGS=1` (vedi sorgenti) |
+| `--test-fallback`, `--test-close`, `--test-robust-delete`, `--test-watchdog`, `--test-watchdog-proc`, `--test-watchdog-copy`, `--test-watchdog-hop`, `--test-detached`, `--test-junction`, `--test-midrun-delete`, `--test-race`, `--test-longpath`, `--test-update-parse`, `--test-update-verify` | Self-test interni, attivi solo con `OPENCODE_ENABLE_TESTFLAGS=1` (vedi sorgenti) |
 | `--report-console <file>` | Sonda distacco, con gate come i test sopra |
 | `--has-payload` | Info sul payload incorporato; exit 0 se presente (usato da publish-fat) |
 | `--` | Tutto ciò che segue va a opencode così com'è, anche flag da launcher |

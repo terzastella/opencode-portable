@@ -73,9 +73,25 @@ Config, data, cache and logs stay inside `./data` next to the scripts.
 
 `bin/`, `data/`, `dist/`, `src/**/payload|bin|obj` and local `config/opencode.json` are git-ignored. The repo ships **source only**:
 
-- `scripts/setup.*` → download the upstream binary into `bin/` (script flow; honors `GITHUB_TOKEN`, fails fast on unsupported OS/arch)
-- `scripts/publish-fat.ps1` → uses the pinned version from `UPSTREAM_VERSION` (explicit `-Version/-Arch` win, RID matched), embeds the zip, publishes the all-in-one exe into `dist/` (never committed: ~137 MiB / ~144 MB), verifies via `--has-payload`
+- `scripts/setup.*` → v1: upstream GitHub zip/tar.gz into `bin/`; v2: npm registry `cli-<os>-<arch>-<version>.tgz` (`@opencode`, fallback `@opencode-ai`), `package/bin/opencode(.exe)` extracted (script flow; honors `GITHUB_TOKEN` only for github.com, fails fast on unsupported OS/arch)
+- `scripts/publish-fat.ps1` → uses the pinned version from `UPSTREAM_VERSION` (explicit `-Version/-Arch` win, RID matched), downloads v1 zip or v2 tgz (v2 re-zipped as `opencode.zip` so the runtime stays zip-only), embeds the zip, publishes the all-in-one exe into `dist/` (never committed), verifies via `--has-payload`
 - `scripts/pack-release.ps1` → `opencode-portable-win-x64.zip`; `scripts/pack-release.sh` → `opencode-portable-linux-macos.tar.gz`. Both secret-scan and never include `data/`, `bin/*`, `dist/` or local configs.
+
+## Self-updater (portable, explicit, zero-trace)
+
+Normal runs never touch the network (offline-first). Only `--check-update`
+and `--update [--yes]` do:
+
+- `GET api.github.com/repos/terzastella/opencode-portable/releases/latest`
+  (retry/timeout like the scripts, `GITHUB_TOKEN` header in-process only),
+  compare tag against the assembly version (`csproj <Version>`).
+- `--update` downloads `OpencodePortable.exe` + `OpencodePortable.exe.sha256`
+  from the SAME release into a unique host-TEMP dir, verifies sha256
+  fail-closed (+ size floor), stages `OpencodePortable.new.exe` next to the
+  current exe, then spawns a detached system powershell helper that moves it
+  over after exit (a running Windows exe is locked).
+- Temp is deleted via `RobustDelete`; leftovers are reported and swept next
+  run / via `--clean-host` (which now covers `opencode-portable-update-*`).
 
 ## Auth note
 

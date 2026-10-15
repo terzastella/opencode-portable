@@ -46,11 +46,14 @@ case "$os-$arch" in
 esac
 
 REPO="anomalyco/opencode"
-ext=".zip"
-if [ "$os" = "linux" ]; then ext=".tar.gz"; fi
 
-target="$os-$arch"
-filename="opencode-$target$ext"
+# v1 (1.x): GitHub zip/tar.gz. v2 (2.x): npm tgz (no GitHub binary assets).
+# Resolve VERSION first, then pick distribution by major.
+resolve_latest_npm() {
+  # Prints latest cli version from metadata endpoint, or empty on failure.
+  curl -fsSL --connect-timeout 15 --max-time 60 "https://opencode.ai/update/api/latest/cli/npm" 2>/dev/null \
+    | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | sed 's/^v//;s/[[:space:]]//g' || true
+}
 
 if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
   # Pinned by default (reproducible): explicit --version always wins.
@@ -60,13 +63,31 @@ if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
   fi
   if [[ "$pinned" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     VERSION="$pinned"
-    url="https://github.com/$REPO/releases/download/v$VERSION/$filename"
-    echo "[setup] downloading pinned v$VERSION (UPSTREAM_VERSION): $filename"
+    echo "[setup] using pinned v$VERSION (UPSTREAM_VERSION)"
   else
-    url="https://github.com/$REPO/releases/latest/download/$filename"
-    echo "[setup] downloading latest: $filename"
+    VERSION="$(resolve_latest_npm)"
+    if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "[setup] ERROR: no valid UPSTREAM_VERSION pin and latest unreachable." >&2
+      exit 1
+    fi
+    echo "[setup] using latest v$VERSION (no valid pin)"
   fi
+fi
+
+is_v2=0
+if [[ "$VERSION" =~ ^2\. ]]; then is_v2=1; fi
+
+target="$os-$arch"
+if [ "$is_v2" = "1" ]; then
+  filename="cli-$target-$VERSION.tgz"
+  npm_pkg="@opencode/cli-$target"
+  url="https://registry.npmjs.org/$npm_pkg/-/cli-$target-$VERSION.tgz"
+  echo "[setup] downloading v$VERSION (npm $npm_pkg): $filename"
+  ext=".tgz"
 else
+  ext=".zip"
+  if [ "$os" = "linux" ]; then ext=".tar.gz"; fi
+  filename="opencode-$target$ext"
   url="https://github.com/$REPO/releases/download/v$VERSION/$filename"
   echo "[setup] downloading v$VERSION: $filename"
 fi
@@ -77,11 +98,22 @@ trap 'rm -rf "$tmp"' EXIT
 curl_args=(-fSL --retry 3 --retry-all-errors --connect-timeout 30 --max-time 600)
 # Authenticated rate limits for CI (60 req/h anonymous): honor GITHUB_TOKEN.
 # Via --config on stdin (never argv): invisible to `ps` on shared hosts.
-if [ -n "${GITHUB_TOKEN:-}" ]; then
+# npm needs no auth; header is harmless there but only send for github.com.
+if [[ "$url" == *"github.com"* ]] && [ -n "${GITHUB_TOKEN:-}" ]; then
   printf 'header = "Authorization: Bearer %s"\n' "$GITHUB_TOKEN" \
     | curl --config - "${curl_args[@]}" -o "$tmp/$filename" "$url"
 else
-  curl "${curl_args[@]}" -o "$tmp/$filename" "$url"
+  if ! curl "${curl_args[@]}" -o "$tmp/$filename" "$url"; then
+    # Fallback for renamed scope: @opencode (current) -> @opencode-ai (legacy).
+    if [ "$is_v2" = "1" ]; then
+      alt_pkg="@opencode-ai/cli-$target"
+      alt_url="https://registry.npmjs.org/$alt_pkg/-/cli-$target-$VERSION.tgz"
+      echo "[setup] retry with legacy scope $alt_pkg..." >&2
+      curl "${curl_args[@]}" -o "$tmp/$filename" "$alt_url"
+    else
+      exit 1
+    fi
+  fi
 fi
 
 # Hash pin: fail closed when recorded (see UPSTREAM_VERSION.sha256, maintained
@@ -106,7 +138,7 @@ if command -v sha256sum >/dev/null 2>&1 && [ -f "$ROOT/UPSTREAM_VERSION.sha256" 
   fi
 fi
 
-if [ "$os" = "linux" ]; then
+if [ "$ext" = ".tgz" ] || [ "$os" = "linux" ]; then
   tar -xzf "$tmp/$filename" -C "$tmp"
 else
   command -v unzip >/dev/null 2>&1 || { echo "[setup] ERROR: 'unzip' is required but not installed." >&2; exit 1; }
