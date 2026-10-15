@@ -156,21 +156,32 @@ if [ -f "$ROOT/UPSTREAM_VERSION.sha256" ]; then
 fi
 
 # Provenance (Sigstore release attestation, v1 GitHub assets only): enforced
-# when the `gh` CLI exists (hash pin above is always enforced). Upstream uses
-# the in-toto release predicate, not gh's SLSA default.
+# when `gh` is present AND authenticated (hash pin above is always enforced).
+# Upstream uses the in-toto release predicate, not gh's SLSA default.
 if [ "$is_v2" != "1" ] && command -v gh >/dev/null 2>&1; then
-  set +e
-  gh_out="$(gh attestation verify "$tmp/$filename" --repo anomalyco/opencode --predicate-type https://in-toto.io/attestation/release/v0.2 2>&1)"
-  gh_rc=$?
-  set -e
-  if [ "$gh_rc" -eq 0 ]; then
-    echo "[setup] attestation verificata (provenance: anomalyco/opencode)."
-  elif printf '%s' "$gh_out" | grep -qi "no attestation"; then
-    echo "[setup] WARNING: no attestation for this asset, hash pin only." >&2
+  if gh auth status >/dev/null 2>&1; then
+    verified=0
+    gh_out=""
+    attempt=0
+    while [ "$attempt" -lt 2 ] && [ "$verified" -eq 0 ]; do
+      attempt=$((attempt + 1))
+      if gh_out="$(gh attestation verify "$tmp/$filename" --repo anomalyco/opencode --predicate-type https://in-toto.io/attestation/release/v0.2 2>&1)"; then
+        verified=1
+      elif [ "$attempt" -lt 2 ]; then
+        sleep 5
+      fi
+    done
+    if [ "$verified" -eq 1 ]; then
+      echo "[setup] attestation verificata (provenance: anomalyco/opencode)."
+    elif printf '%s' "$gh_out" | grep -qi "no attestation"; then
+      echo "[setup] WARNING: no attestation for this asset, hash pin only." >&2
+    else
+      echo "[setup] ERROR: attestation verification FAILED, refusing install." >&2
+      echo "$gh_out" >&2
+      exit 1
+    fi
   else
-    echo "[setup] ERROR: attestation verification FAILED, refusing install." >&2
-    echo "$gh_out" >&2
-    exit 1
+    echo "[setup] nota: gh senza autenticazione, provenance non verificata (hash pin attivo)."
   fi
 fi
 

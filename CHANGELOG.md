@@ -4,6 +4,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials onl
 
 ## [Unreleased]
 
+- Attestation gate fix: `gh` present but unauthenticated no longer fails the
+  build/install (warn + hash pin governs, as if `gh` were absent); crypto
+  failures still fail closed, with one retry against transient infra errors.
+
 ## [v1.4.1] - 2026-10-15
 
 - Fix: `TryParseVer` hung forever on 2-component versions (loop length never
