@@ -179,6 +179,28 @@ try {
   $pins | Set-Content -LiteralPath $PinFile
   Step "recorded hash pin: $pinLine"
 
+  # Provenance (Sigstore release attestation, v1 GitHub assets only): enforced
+  # when the `gh` CLI exists (hash pin above is always enforced). Upstream uses
+  # the in-toto release predicate, NOT gh's SLSA default — without it every
+  # verification fails. npm tgz (v2) carries no GitHub attestation: skipped.
+  if (-not $IsV2) {
+    $Gh = Get-Command gh -ErrorAction SilentlyContinue
+    if ($Gh) {
+      $ghOut = & gh attestation verify $PayloadZip --repo 'anomalyco/opencode' --predicate-type 'https://in-toto.io/attestation/release/v0.2' 2>&1
+      $ghRc = $LASTEXITCODE
+      $ghText = ($ghOut | Out-String)
+      if ($ghRc -eq 0) {
+        Step "attestation verificata (provenance: anomalyco/opencode)."
+      } elseif ($ghText -match '(?i)no attestation') {
+        Step "ATTENZIONE: nessuna attestation per questo asset, vale solo hash pin."
+      } else {
+        throw "attestation verification FAILED, refusing to embed.`n$ghText"
+      }
+    } else {
+      Step "nota: `gh` assente, provenance non verificata (hash pin attivo)."
+    }
+  }
+
   Step "publishing ($Rid)..."
   & dotnet publish (Join-Path $Root 'src\OpencodePortable\OpencodePortable.csproj') -c Release -r $Rid -o $OutDir
   if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed." }

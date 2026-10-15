@@ -122,6 +122,28 @@ try {
   } else {
     Write-Host "[setup] ATTENZIONE: no recorded hash for windows-$Arch v$Version, TLS-only trust." -ForegroundColor Yellow
   }
+  # Provenance (Sigstore release attestation, v1 GitHub assets only): enforced
+  # when the `gh` CLI exists, best-effort otherwise (the hash pin above is
+  # always enforced). NOTE: upstream uses the in-toto release predicate, NOT
+  # gh's SLSA default — without --predicate-type this always fails.
+  # npm tgz (v2) carries no GitHub attestation: skipped by design.
+  if (-not $IsV2) {
+    $Gh = Get-Command gh -ErrorAction SilentlyContinue
+    if ($Gh) {
+      $ghOut = & gh attestation verify $Archive --repo 'anomalyco/opencode' --predicate-type 'https://in-toto.io/attestation/release/v0.2' 2>&1
+      $ghRc = $LASTEXITCODE
+      $ghText = ($ghOut | Out-String)
+      if ($ghRc -eq 0) {
+        Write-Host "[setup] attestation verificata (provenance: anomalyco/opencode)."
+      } elseif ($ghText -match '(?i)no attestation') {
+        Write-Host "[setup] ATTENZIONE: nessuna attestation per questo asset, vale solo hash pin." -ForegroundColor Yellow
+      } else {
+        throw "attestation verification FAILED, refusing install.`n$ghText"
+      }
+    } else {
+      Write-Host "[setup] nota: `gh` assente, provenance non verificata (hash pin attivo)."
+    }
+  }
   if ($IsV2) {
     # npm tgz: package/bin/opencode.exe. Use system tar (Win10+).
     $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
