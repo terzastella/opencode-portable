@@ -55,8 +55,10 @@ internal static class Updater
             if (parts.Length < 2 || parts.Length > 4) return false;
             foreach (string p in parts)
                 if (!int.TryParse(p, out _) || p.Length == 0) return false;
-            // Normalize to 3 components for comparison.
-            while (parts.Length < 3) core += ".0";
+            // Normalize to 3 components for comparison. Fixed count on purpose:
+            // the old `while (parts.Length < 3)` never re-split parts and hung
+            // forever on 2-component input (e.g. tag "v1.4").
+            if (parts.Length == 2) core += ".0";
             v = new Version(core);
             return true;
         }
@@ -302,6 +304,17 @@ internal static class Updater
 
     private static bool StageReplace(string stagedNew, string currentExe)
     {
+        return StageReplacePaths(stagedNew, currentExe);
+    }
+
+    /// <summary>
+    /// Spawns the detached post-exit mover (see StageReplacePaths): the file
+    /// swap itself happens after this process exits, so a `true` return only
+    /// means the helper started. Completion is verified on the NEXT launch
+    /// via StaleNewExe (a leftover `.new.exe` proves the move never landed).
+    /// </summary>
+    internal static bool StageReplacePaths(string stagedNew, string currentExe)
+    {
         try
         {
             string shell = Path.Combine(
@@ -326,6 +339,90 @@ internal static class Updater
             return p is not null;
         }
         catch { return false; }
+    }
+
+    internal const string StagedNewExeName = "OpencodePortable.new.exe";
+
+    /// <summary>
+    /// A leftover staged `.new.exe` next to the running exe proves a previous
+    /// post-exit replace never landed (permissions, another live instance).
+    /// Returns its path, or null when no update is pending.
+    /// </summary>
+    internal static string? StaleNewExe(string exeDir)
+    {
+        try
+        {
+            string cand = Path.Combine(exeDir, StagedNewExeName);
+            return File.Exists(cand) ? cand : null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Second chance for a pending replace: re-spawns the detached post-exit
+    /// mover (idempotent — a concurrent helper that already moved the file
+    /// simply finds nothing to move). Called on normal exit paths only.
+    /// </summary>
+    internal static void RetryPendingReplace(string stagedNew, string currentExe)
+    {
+        try
+        {
+            if (StageReplacePaths(stagedNew, currentExe))
+            {
+                // Console write that never throws (detached processes may
+                // have no console); a failed write must not fail the exit.
+                try { Console.Error.WriteLine("[update] sostituzione in sospeso riavviata: verrà applicata alla chiusura."); }
+                catch { }
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Test hook (--test-update-replace): stale detection plus a real
+    /// detached-helper replace of two dummy files (no network, ~2-20 s).
+    /// </summary>
+    public static int TestUpdateReplace()
+    {
+        string baseDir = Path.Combine(Path.GetTempPath(),
+            "opencode-testupdaterep-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(baseDir);
+            string cur = Path.Combine(baseDir, "OpencodePortable.exe");
+            string nxt = Path.Combine(baseDir, StagedNewExeName);
+            File.WriteAllText(cur, "OLD");
+            File.WriteAllText(nxt, "NEW");
+            bool detected = StaleNewExe(baseDir) == nxt;
+            Console.WriteLine($"[test-update-replace] detected={detected}");
+            if (!detected) { Console.Error.WriteLine("[test-update-replace] FALLITO (detect)"); return 1; }
+            if (!StageReplacePaths(nxt, cur)) { Console.Error.WriteLine("[test-update-replace] FALLITO (spawn)"); return 1; }
+            bool done = false;
+            for (int i = 0; i < 100; i++)
+            {
+                Thread.Sleep(200);
+                try
+                {
+                    if (!File.Exists(nxt) && File.ReadAllText(cur) == "NEW") { done = true; break; }
+                }
+                catch { }
+            }
+            Console.WriteLine($"[test-update-replace] replaced={done}");
+            bool absentNull = !done ? false : StaleNewExe(baseDir) is null;
+            Console.WriteLine($"[test-update-replace] absent-null={absentNull}");
+            bool ok = done && absentNull;
+            Console.WriteLine(ok ? "[test-update-replace] OK" : "[test-update-replace] FALLITO");
+            return ok ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[test-update-replace] ERRORE: {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(baseDir, recursive: true); } catch { }
+        }
     }
 
     internal static int SweepUpdateTemp()
@@ -367,6 +464,12 @@ internal static class Updater
             ("2.0.29", "1.19.0", false),
             ("bogus", "1.4.0", false),
             ("1.3.6", "bogus", false),
+            // 2-component input: used to hang forever (loop length never
+            // changed); must parse and compare instead.
+            ("1.4", "1.5", true),
+            ("1.4", "1.4.0", false),
+            ("v1.4", "v1.4.1", true),
+            ("1.4-beta", "1.4.0", false),
         };
         foreach (var (cur, latest, expect) in cases)
         {

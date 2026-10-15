@@ -87,7 +87,8 @@ internal static class Program
 
     /// <summary>
     /// Crash-log directory, set once the workspace is known. The exe itself is
-    /// stateless: nothing is ever written next to it.
+    /// stateless on a normal run: nothing is ever written next to it (opt-in
+    /// `--persist-auth` keeps `auth/`, `--update` stages `.new.exe`).
     /// </summary>
     private static string? s_crashDir;
 
@@ -325,6 +326,12 @@ internal static class Program
             ? baseDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             : baseDir;
 
+        // A leftover staged `.new.exe` proves a previous post-exit replace
+        // never landed: report now, retry on normal exit (see below).
+        string? pendingUpdate = Updater.StaleNewExe(root);
+        if (pendingUpdate is not null)
+            Console.Error.WriteLine("[update] ATTENZIONE: aggiornamento precedente non completato (trovato .new.exe); riprovo alla chiusura, altrimenti chiudi tutte le istanze.");
+
         // Launcher-owned args (stripped, never forwarded to opencode).
         bool allowPath = Environment.GetEnvironmentVariable("OPENCODE_ALLOW_PATH_FALLBACK") == "1";
         bool forceConsole = false;
@@ -508,6 +515,11 @@ internal static class Program
             {
                 if (!TestsEnabled()) return 1;
                 return Updater.TestUpdateVerify();
+            }
+            if (args[i] == "--test-update-replace")
+            {
+                if (!TestsEnabled()) return 1;
+                return Updater.TestUpdateReplace();
             }
             if (args[i] == "--test-auth-roundtrip")
             {
@@ -703,7 +715,15 @@ internal static class Program
             Console.Error.WriteLine("[opencode-portable] auth persistente attiva: il login sopravvive ai run (--forget-auth per rimuoverla).");
         }
 
-        return PortableRun.Execute(data, cfg, workFull, resolved, fwd, authDir);
+        int code = PortableRun.Execute(data, cfg, workFull, resolved, fwd, authDir);
+        // Second chance for a stale update (idempotent mover, see Updater).
+        if (pendingUpdate is not null)
+        {
+            string? selfExe = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(selfExe))
+                Updater.RetryPendingReplace(pendingUpdate, selfExe);
+        }
+        return code;
     }
 
     /// <summary>
