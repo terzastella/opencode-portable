@@ -521,6 +521,11 @@ internal static class Program
                 if (!TestsEnabled()) return 1;
                 return Updater.TestUpdateReplace();
             }
+            if (args[i] == "--test-sweep-grace")
+            {
+                if (!TestsEnabled()) return 1;
+                return TestSweepGrace();
+            }
             if (args[i] == "--test-auth-roundtrip")
             {
                 if (!TestsEnabled()) return 1;
@@ -743,6 +748,25 @@ internal static class Program
     }
 
     /// <summary>
+    /// Grace window protecting concurrent initialization: between the first
+    /// mkdir of a per-run root and its `.lock` write, a concurrent sweeper
+    /// sees a lockless root it cannot verify. Roots younger than this are
+    /// never swept. Genuine leftovers are always older (the sweeper runs once
+    /// per launch), so they only wait one extra launch.
+    /// </summary>
+    private static readonly TimeSpan SweepGrace = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// True when the root is too young to judge (fail-safe: unreadable
+    /// timestamps also count as young — never delete what you cannot date).
+    /// </summary>
+    internal static bool IsFreshRoot(string dir)
+    {
+        try { return Directory.GetCreationTime(dir) > DateTime.Now - SweepGrace; }
+        catch { return true; }
+    }
+
+    /// <summary>
     /// Sweeps crash/kill leftovers. STRICT policy (shared with the watchdog):
     /// only directories whose name matches our exact per-run stamp AND whose
     /// PID is dead. Live processes are never touched, and user directories
@@ -763,8 +787,10 @@ internal static class Program
                 // Ownership first: a live .lock with matching pid+startTicks means
                 // OUR process (or a concurrent sibling) still runs it. PID alone
                 // is not enough (recycle); ticks make it airtight. No lock or
-                // dead owner -> stale, safe to remove.
+                // dead owner -> stale, safe to remove — unless too young to
+                // judge (concurrent sibling mid-initialization, see SweepGrace).
                 if (IsOwnedAlive(dir)) continue;
+                if (IsFreshRoot(dir)) continue;
                 PortableRun.RobustDelete(dir, 3000);
                 if (!Directory.Exists(dir)) removed++;
             }
@@ -792,6 +818,49 @@ internal static class Program
             return !p.HasExited && p.StartTime.Ticks == ticks;
         }
         catch { return false; }
+    }
+
+    /// <summary>
+    /// Test hook (--test-sweep-grace): fresh lockless root (simulated
+    /// concurrent init) must survive the sweeper, old lockless root must go,
+    /// old live-locked root must survive. Deterministic, no concurrency needed.
+    /// </summary>
+    public static int TestSweepGrace()
+    {
+        string ws = Path.Combine(Path.GetTempPath(),
+            "opencode-testsweep-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(ws);
+            string oldRoot = Path.Combine(ws, ".opencode-portable-20200101-000000-99999999-7");
+            string freshRoot = Path.Combine(ws, $".opencode-portable-{DateTime.Now:yyyyMMdd-HHmmss}-{Environment.ProcessId}-424242");
+            string liveRoot = Path.Combine(ws, ".opencode-portable-20200101-000001-99999998-8");
+            Directory.CreateDirectory(oldRoot);
+            Directory.CreateDirectory(freshRoot);
+            Directory.CreateDirectory(liveRoot);
+            Directory.SetCreationTime(oldRoot, DateTime.Now.AddHours(-1));
+            Directory.SetCreationTime(liveRoot, DateTime.Now.AddHours(-1));
+            long ticks = 0;
+            try { using var me = Process.GetCurrentProcess(); ticks = me.StartTime.Ticks; } catch { }
+            File.WriteAllText(Path.Combine(liveRoot, ".lock"), $"{Environment.ProcessId}:{ticks}");
+            int n = SweepStalePortableRoots(ws);
+            bool oldGone = !Directory.Exists(oldRoot);
+            bool freshKept = Directory.Exists(freshRoot);
+            bool liveKept = Directory.Exists(liveRoot);
+            Console.WriteLine($"[test-sweep-grace] oldGone={oldGone} freshKept={freshKept} liveKept={liveKept} removed={n}");
+            bool ok = oldGone && freshKept && liveKept;
+            Console.WriteLine(ok ? "[test-sweep-grace] OK" : "[test-sweep-grace] FALLITO");
+            return ok ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[test-sweep-grace] ERRORE: {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(ws, recursive: true); } catch { }
+        }
     }
 
     /// <summary>
