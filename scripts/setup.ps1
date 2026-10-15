@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # Download the matching upstream opencode binary into .\bin\
-# Usage: .\scripts\setup.ps1 [-Version 1.19.0]
+# Usage: .\scripts\setup.ps1 [-Version <x.y.z|latest>] (default: pinned UPSTREAM_VERSION)
 # SPDX-License-Identifier: MIT
 param([string]$Version = "")
 
@@ -23,6 +23,9 @@ $Repo = 'anomalyco/opencode'
 # Major is known after version resolution below; default to v1 layout until then.
 $FileName = "opencode-windows-$Arch.zip"
 $IsV2 = $false
+# Version rule (same in setup.sh): empty = pinned UPSTREAM_VERSION (fail-closed
+# when the pin is missing/invalid); `latest` = truly resolve upstream;
+# numeric = exactly that version.
 if ($Version -ne "") {
   # Explicit versions are validated like the pin: an untrusted VERSION must
   # never reach URL interpolation or log lines raw (path probing / CRLF log
@@ -51,15 +54,7 @@ if ($Version -ne "") {
     $Version = $pinned
     Write-Host "[setup] using pinned v$Version (UPSTREAM_VERSION)"
   } else {
-    try {
-      $meta = Invoke-RestMethod -Uri "https://opencode.ai/update/api/latest/cli/npm" -TimeoutSec 30
-      $resolved = ([string]$meta.version).TrimStart('v')
-      if ($resolved -match '^\d+\.\d+\.\d+$') { $Version = $resolved }
-      else { throw "bad metadata version" }
-    } catch {
-      throw "no valid UPSTREAM_VERSION pin and latest unreachable."
-    }
-    Write-Host "[setup] using latest v$Version (no valid pin)"
+    throw "no valid UPSTREAM_VERSION pin: pass -Version <x.y.z|latest> explicitly."
   }
 }
 

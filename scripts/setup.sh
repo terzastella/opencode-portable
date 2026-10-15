@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Download the matching upstream opencode binary into ./bin/
-# Usage: ./scripts/setup.sh [--version 1.19.0]
+# Usage: ./scripts/setup.sh [--version <x.y.z|latest>] (default: pinned UPSTREAM_VERSION)
 # SPDX-License-Identifier: MIT
 set -euo pipefail
 
@@ -55,8 +55,11 @@ resolve_latest_npm() {
     | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | sed 's/^v//;s/[[:space:]]//g' || true
 }
 
-if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
-  # Pinned by default (reproducible): explicit --version always wins.
+# Version rule (same in setup.ps1): empty = pinned UPSTREAM_VERSION (fail-closed
+# when the pin is missing/invalid); `latest` = truly resolve upstream;
+# numeric = exactly that version.
+if [ -z "$VERSION" ]; then
+  # Pinned by default (reproducible).
   pinned=""
   if [ -f "$ROOT/UPSTREAM_VERSION" ]; then
     pinned="$(tr -d '[:space:]' < "$ROOT/UPSTREAM_VERSION")"
@@ -65,13 +68,16 @@ if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
     VERSION="$pinned"
     echo "[setup] using pinned v$VERSION (UPSTREAM_VERSION)"
   else
-    VERSION="$(resolve_latest_npm)"
-    if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-      echo "[setup] ERROR: no valid UPSTREAM_VERSION pin and latest unreachable." >&2
-      exit 1
-    fi
-    echo "[setup] using latest v$VERSION (no valid pin)"
+    echo "[setup] ERROR: no valid UPSTREAM_VERSION pin: pass --version <x.y.z|latest> explicitly." >&2
+    exit 1
   fi
+elif [ "$VERSION" = "latest" ]; then
+  VERSION="$(resolve_latest_npm)"
+  if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "[setup] ERROR: could not resolve latest version (npm metadata unreachable)." >&2
+    exit 1
+  fi
+  echo "[setup] resolved latest: v$VERSION"
 fi
 
 is_v2=0
@@ -123,16 +129,27 @@ if [ "${size:-0}" -lt 10485760 ]; then
   echo "[setup] ERROR: downloaded archive suspiciously small (${size}B), refusing install." >&2
   exit 1
 fi
-if command -v sha256sum >/dev/null 2>&1 && [ -f "$ROOT/UPSTREAM_VERSION.sha256" ]; then
+# Portable SHA-256: sha256sum (Linux), shasum -a 256 (macOS/BSD).
+# Prints the hex digest, or fails when no tool exists (caller warns loudly).
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1;
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1;
+  else return 1; fi
+}
+
+if [ -f "$ROOT/UPSTREAM_VERSION.sha256" ]; then
   pin="$(grep -E "^$target[[:space:]]+$VERSION[[:space:]]+[0-9a-f]{64}[[:space:]]*$" "$ROOT/UPSTREAM_VERSION.sha256" | head -n 1 || true)"
   if [ -n "$pin" ]; then
     expected="$(echo "$pin" | grep -Eo '[0-9a-f]{64}' | head -n 1)"
-    actual="$(sha256sum "$tmp/$filename" | cut -d' ' -f1)"
-    if [ "$actual" != "$expected" ]; then
-      echo "[setup] ERROR: downloaded archive hash mismatch (possible tampering), refusing install." >&2
-      exit 1
+    if actual="$(sha256_of "$tmp/$filename")"; then
+      if [ "$actual" != "$expected" ]; then
+        echo "[setup] ERROR: downloaded archive hash mismatch (possible tampering), refusing install." >&2
+        exit 1
+      fi
+      echo "[setup] hash pin verified."
+    else
+      echo "[setup] WARNING: no SHA-256 tool (sha256sum/shasum) — recorded hash NOT verified, TLS-only trust." >&2
     fi
-    echo "[setup] hash pin verified."
   else
     echo "[setup] WARNING: no recorded hash for $target v$VERSION, TLS-only trust." >&2
   fi

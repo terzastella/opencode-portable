@@ -1,12 +1,15 @@
 #!/usr/bin/env pwsh
 # Build the all-in-one exe: downloads the upstream opencode zip at BUILD time,
 # embeds it as a resource, publishes the single file. No network at runtime, ever.
-# Usage: .\scripts\publish-fat.ps1 [-Version latest] [-Arch x64] [-Out dist]
+# Usage: .\scripts\publish-fat.ps1 [-Version <x.y.z|latest>] [-Arch x64] [-Out dist] [-AllowPinRotation]
+# Empty -Version uses the pinned UPSTREAM_VERSION (reproducible); `latest`
+# truly resolves the newest upstream; explicit x.y.z uses exactly that.
 # SPDX-License-Identifier: MIT
 param(
-  [string]$Version = "latest",
+  [string]$Version = "",
   [ValidateSet('', 'x64', 'arm64')][string]$Arch = "",
-  [string]$Out = "dist"
+  [string]$Out = "dist",
+  [switch]$AllowPinRotation
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,25 +39,28 @@ $Repo = 'anomalyco/opencode'
 $headers = @{}
 if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)" }
 $PinnedFile = Join-Path $Root 'UPSTREAM_VERSION'
-if ($Version -eq "" -or $Version -eq "latest") {
-  # Pinned by default: reproducible releases. An explicit -Version always wins.
+if ($Version -eq "") {
+  # Pinned by default: reproducible releases.
   $pinned = ""
   if (Test-Path -LiteralPath $PinnedFile) { $pinned = (Get-Content -LiteralPath $PinnedFile -Raw).Trim() }
   if ($pinned -match '^\d+\.\d+\.\d+$') {
     $Version = $pinned
-    Step "using pinned upstream v$Version (from UPSTREAM_VERSION; -Version overrides)."
+    Step "using pinned upstream v$Version (from UPSTREAM_VERSION)."
   } else {
-    Step "resolving latest cli (npm metadata, no valid UPSTREAM_VERSION pin)..."
-    $meta = $null
-    for ($i = 1; $i -le 3 -and $null -eq $meta; $i++) {
-      try { $meta = Invoke-RestMethod -Uri "https://opencode.ai/update/api/latest/cli/npm" -TimeoutSec 30 }
-      catch { if ($i -eq 3) { throw }; Step "API retry $i/3..."; Start-Sleep 5 }
-    }
-    $Version = ([string]$meta.version).TrimStart('v')
-    if ($Version -eq "" -or $Version -notmatch '^\d+\.\d+\.\d+$') { throw "could not resolve latest version." }
+    throw "no valid UPSTREAM_VERSION pin: pass -Version <x.y.z|latest> explicitly."
   }
+} elseif ($Version -eq "latest") {
+  Step "resolving latest cli (npm metadata)..."
+  $meta = $null
+  for ($i = 1; $i -le 3 -and $null -eq $meta; $i++) {
+    try { $meta = Invoke-RestMethod -Uri "https://opencode.ai/update/api/latest/cli/npm" -TimeoutSec 30 }
+    catch { if ($i -eq 3) { throw }; Step "API retry $i/3..."; Start-Sleep 5 }
+  }
+  $Version = ([string]$meta.version).TrimStart('v')
+  if ($Version -eq "" -or $Version -notmatch '^\d+\.\d+\.\d+$') { throw "could not resolve latest version." }
 } else {
   $Version = $Version.TrimStart('v')
+  if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "invalid version '$Version' (expected x.y.z or 'latest')." }
 }
 $IsV2 = $Version -match '^2\.'
 if ($IsV2) {
@@ -172,6 +178,17 @@ try {
   $PinFile = Join-Path $Root 'UPSTREAM_VERSION.sha256'
   $pinHash = $zipHashRecord
   if ($IsV2 -and $TgzHashRecord -match '^[0-9a-f]{64}$') { $pinHash = $TgzHashRecord }
+  # Rotation gate: a recorded pin for the same arch+version must never change
+  # silently (upstream re-cut the asset, or tampering). Accept explicitly.
+  $existing = @()
+  if (Test-Path -LiteralPath $PinFile) { $existing = @(Get-Content -LiteralPath $PinFile | Where-Object { $_ -match "^windows-$Arch\s+$Version\s+([0-9a-f]{64})\s*$" }) }
+  if ($existing.Count -gt 0) {
+    $oldHash = ([regex]::Match($existing[0], '([0-9a-f]{64})').Groups[1].Value).ToLowerInvariant()
+    if ($oldHash -ne $pinHash -and -not $AllowPinRotation) {
+      throw "recorded pin for windows-$Arch $Version differs from the downloaded archive (upstream re-cut the asset, or possible tampering). Re-run with -AllowPinRotation to accept explicitly."
+    }
+    if ($oldHash -ne $pinHash) { Step "pin rotation accepted explicitly (-AllowPinRotation)." }
+  }
   $pinLine = "windows-$Arch $Version $pinHash"
   $pins = @()
   if (Test-Path -LiteralPath $PinFile) { $pins = @(Get-Content -LiteralPath $PinFile | Where-Object { $_ -notmatch "^windows-$Arch\s+$Version\s+" -and $_.Trim() -ne "" }) }
