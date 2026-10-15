@@ -33,6 +33,7 @@ internal static class PortableRun
     // never twice (a second read could see a disposed object).
     private static volatile Process? s_child;
     private static volatile string? s_dataRoot;
+    private static volatile string? s_authDir;
 
     private const uint CTRL_CLOSE_EVENT = 2;
     private const uint CTRL_LOGOFF_EVENT = 5;
@@ -56,8 +57,15 @@ internal static class PortableRun
         try
         {
             string? root = s_dataRoot;
+            string? authDir = s_authDir;
             if (!string.IsNullOrEmpty(root) && Directory.Exists(root))
             {
+                // Best-effort auth copy-back first (tiny file, fits the grace
+                // budget); a kill mid-copy just keeps last-good tokens.
+                if (!string.IsNullOrEmpty(authDir))
+                {
+                    try { CopyBackPersistedAuth(root, authDir); } catch { }
+                }
                 string trash = root + "-trash";
                 try
                 {
@@ -115,7 +123,7 @@ internal static class PortableRun
         return true;
     }
     public static int Execute(string data, string cfg, string workspace,
-        string binary, List<string> fwdArgs)
+        string binary, List<string> fwdArgs, string? authPersistDir = null)
     {
         // Watchdog: a renamed copy of this exe watching OUR pid. Whatever kills
         // us (exit, crash, X-close, Task Manager single or group) wakes it and
@@ -146,6 +154,7 @@ internal static class PortableRun
 
         int code;
         s_dataRoot = data;
+        s_authDir = authPersistDir;
         try { SetConsoleCtrlHandler(s_ctrlHandler, add: true); } catch { }
         try
         {
@@ -182,9 +191,16 @@ internal static class PortableRun
         }
         finally
         {
+            string? authDir = s_authDir;
             s_child = null;
             s_dataRoot = null;
+            s_authDir = null;
             try { SetConsoleCtrlHandler(s_ctrlHandler, add: false); } catch { }
+            // Opt-in auth persistence: copy rotated tokens back BEFORE the
+            // root is deleted (a kill that skips this finally simply keeps
+            // the last-good tokens; re-login only in rare rotation races).
+            if (!string.IsNullOrEmpty(authDir))
+                CopyBackPersistedAuth(data, authDir);
             // Full privacy: delete the ENTIRE per-run root, always, on any exit
             // path or code. Retry budget ~10s for draining locks (running image,
             // antivirus). Leftovers are reported, never silent.
@@ -347,6 +363,11 @@ internal static class PortableRun
         {
             bases.Add(Path.Combine(userProfile, ".config"));
             bases.Add(Path.Combine(userProfile, ".local", "share"));
+            // Fallback auth location used by opencode when XDG_DATA_HOME is
+            // unset (~/.opencode/auth.json): we always set it, but a child
+            // ignoring redirects could still land here. Never holds OUR
+            // persistent auth (that lives next to the exe, outside guards).
+            paths.Add(Path.Combine(userProfile, ".opencode"));
         }
         foreach (string? baseDir in bases)
         {
@@ -363,6 +384,139 @@ internal static class PortableRun
     {
         try { DeleteTreeNoFollow(path); }
         catch { }
+    }
+
+    /// <summary>
+    /// Auth file identity inside a per-run root, mirroring opencode's own
+    /// lookup ($XDG_DATA_HOME/opencode/auth.json, verified in the 1.19.0
+    /// binary). Only this file is ever persisted; caches/sessions stay
+    /// ephemeral by design.
+    /// </summary>
+    internal static readonly string AuthFileRelative =
+        "data" + Path.DirectorySeparatorChar + "opencode" + Path.DirectorySeparatorChar + "auth.json";
+
+    internal const string PersistAuthFileName = "auth.json";
+
+    /// <summary>
+    /// Copies a previously persisted login into the fresh per-run root
+    /// (opt-in --persist-auth only). Missing source = first login yet to
+    /// happen: silent no-op, never an error.
+    /// </summary>
+    internal static void SeedPersistedAuth(string dataRoot, string persistDir)
+    {
+        try
+        {
+            string src = Path.Combine(persistDir, PersistAuthFileName);
+            if (!File.Exists(src)) return;
+            string dst = Path.Combine(dataRoot, AuthFileRelative);
+            Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
+            File.Copy(src, dst, overwrite: true);
+        }
+        catch (Exception ex)
+        {
+            WEcho("[opencode-portable] ATTENZIONE: auth persistita non ripristinabile (" + ex.GetType().Name + ").");
+        }
+    }
+
+    /// <summary>
+    /// Copies (possibly rotated) tokens back to the persistent dir, atomically
+    /// via .new + move. A missing source means no login happened this run:
+    /// the persistent copy is NEVER wiped on that path.
+    /// </summary>
+    internal static void CopyBackPersistedAuth(string dataRoot, string persistDir)
+    {
+        try
+        {
+            string src = Path.Combine(dataRoot, AuthFileRelative);
+            if (!File.Exists(src)) return;
+            Directory.CreateDirectory(persistDir);
+            string tmp = Path.Combine(persistDir, PersistAuthFileName + ".new");
+            string dst = Path.Combine(persistDir, PersistAuthFileName);
+            File.Copy(src, tmp, overwrite: true);
+            File.Move(tmp, dst, overwrite: true);
+        }
+        catch (Exception ex)
+        {
+            WEcho("[opencode-portable] ATTENZIONE: auth non salvata (" + ex.GetType().Name + "); il login resta valido, rifai login se serve.");
+        }
+    }
+
+    /// <summary>
+    /// Explicit logout: removes the persistent auth dir. Reparse-safe (a
+    /// planted link is removed itself, never followed). --clean-host
+    /// deliberately does NOT cover this dir: deleting credentials silently
+    /// would be the opposite of fail-closed.
+    /// </summary>
+    internal static int ForgetPersistedAuth(string persistDir)
+    {
+        try
+        {
+            if (!Directory.Exists(persistDir) && !File.Exists(persistDir))
+            {
+                Console.WriteLine("[auth] niente da dimenticare (nessuna auth persistita).");
+                return 0;
+            }
+            if (IsReparsePoint(persistDir)) DeleteTreeNoFollow(persistDir);
+            else if (Directory.Exists(persistDir)) DeleteTreeNoFollow(persistDir);
+            else if (File.Exists(persistDir)) File.Delete(persistDir);
+            Console.WriteLine("[auth] credenziali persistenti rimosse. Rifai `opencode auth login` per riusare i free.");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("[auth] ERRORE rimozione: " + ex.GetType().Name);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Test hook (--test-auth-roundtrip): seed/copy-back/forget cycle with a
+    /// fake auth.json, no network. Asserts the persist dir is never wiped by
+    /// a run without login.
+    /// </summary>
+    public static int TestAuthRoundtrip()
+    {
+        string baseDir = Path.Combine(Path.GetTempPath(),
+            "opencode-testauth-" + Guid.NewGuid().ToString("N"));
+        string persist = Path.Combine(baseDir, "auth");
+        string root = Path.Combine(baseDir, "root");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "data", "opencode"));
+            // 1. Nothing anywhere: silent no-ops, persist stays absent.
+            SeedPersistedAuth(root, persist);
+            CopyBackPersistedAuth(root, persist);
+            bool s1 = !File.Exists(Path.Combine(persist, PersistAuthFileName));
+            // 2. Persisted login seeds into the fresh root.
+            Directory.CreateDirectory(persist);
+            File.WriteAllText(Path.Combine(persist, PersistAuthFileName), "{\"test\":1}");
+            SeedPersistedAuth(root, persist);
+            bool s2 = File.ReadAllText(Path.Combine(root, AuthFileRelative)) == "{\"test\":1}";
+            // 3. Rotated tokens in the root copy back.
+            File.WriteAllText(Path.Combine(root, AuthFileRelative), "{\"test\":2}");
+            CopyBackPersistedAuth(root, persist);
+            bool s3 = File.ReadAllText(Path.Combine(persist, PersistAuthFileName)) == "{\"test\":2}";
+            // 4. Root without login never wipes persist.
+            File.Delete(Path.Combine(root, AuthFileRelative));
+            CopyBackPersistedAuth(root, persist);
+            bool s4 = File.ReadAllText(Path.Combine(persist, PersistAuthFileName)) == "{\"test\":2}";
+            // 5. Forget removes.
+            int rc = ForgetPersistedAuth(persist);
+            bool s5 = rc == 0 && !Directory.Exists(persist);
+            Console.WriteLine($"[test-auth] miss={s1} seed={s2} copyback={s3} no-wipe={s4} forget={s5}");
+            bool ok = s1 && s2 && s3 && s4 && s5;
+            Console.WriteLine(ok ? "[test-auth] OK" : "[test-auth] FALLITO");
+            return ok ? 0 : 1;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[test-auth] ERRORE: {ex.Message}");
+            return 1;
+        }
+        finally
+        {
+            try { Directory.Delete(baseDir, recursive: true); } catch { }
+        }
     }
 
     /// <summary>

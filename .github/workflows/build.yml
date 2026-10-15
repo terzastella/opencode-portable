@@ -40,7 +40,7 @@ jobs:
           $exe = 'dist/OpencodePortable.exe'
           & $exe --self-test
           if ($LASTEXITCODE -ne 0) { throw 'self-test failed' }
-          foreach ($t in @('--test-robust-delete', '--test-close', '--test-watchdog', '--test-watchdog-proc', '--test-detached', '--test-update-parse', '--test-update-verify')) {
+          foreach ($t in @('--test-robust-delete', '--test-close', '--test-watchdog', '--test-watchdog-proc', '--test-detached', '--test-update-parse', '--test-update-verify', '--test-auth-roundtrip')) {
             & $exe $t
             if ($LASTEXITCODE -ne 0) { throw "$t failed" }
           }

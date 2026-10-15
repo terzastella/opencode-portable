@@ -18,12 +18,16 @@
   <a href="https://github.com/terzastella/opencode-portable/actions"><img src="https://github.com/terzastella/opencode-portable/actions/workflows/build.yml/badge.svg" alt="CI build"></a>
 </p>
 
-> Designed for opencode's built-in free models — no login, no providers to
-> connect. External providers (NVIDIA, Anthropic, OpenAI, …) were **not
-> tested** with this project: API keys are accepted per session but provider
-> setups are unverified.
+> Free models currently work with no login (verified Oct 2026) — but upstream
+> gated them server-side before (`FreeTierError`, Sep 2026) and may do it
+> again. Backup plan, already built in: one-time Zen login
+> (`opencode auth login`, or `OPENCODE_API_KEY` per session): script
+> launchers persist it in `data/`, the exe wipes it every run unless you opt
+> in with `--persist-auth`. External providers (NVIDIA, Anthropic, OpenAI, …)
+> were **not tested** with this project: API keys are accepted per session
+> but provider setups are unverified.
 >
-> Tested with opencode `1.19.0` (snapshot version; setup scripts default to the pinned `UPSTREAM_VERSION`). v2 (`2.x`, npm tgz) stays opt-in via `-Version` for trials: its free tier needs Zen login server-side.
+> Tested with opencode `1.19.0` (snapshot version; setup scripts default to the pinned `UPSTREAM_VERSION`). v2 (`2.x`, npm tgz) stays opt-in via `-Version` for trials.
 
 ## Download
 
@@ -54,7 +58,7 @@ if ((Get-FileHash OpencodePortable.exe -Algorithm SHA256).Hash.ToLower() -ne (Ge
 | Isolation | Config, data, cache, state and temp live in `<workspace>/.opencode-portable-<timestamp>-<pid>-<rand>/`, deleted on exit — normal quit, X/Alt+F4, Ctrl+C and Task Manager kill included |
 | Offline | Embedded opencode binary, extracted on first run — no downloads by the launcher, ever (opencode's own model traffic and OS reputation checks still use the network) |
 | Fast startup | Skips the blocking 10–30 s `models.dev` fetch |
-| No login stored | Built-in free models just work; provider API keys are typed per session, never stored |
+| No login needed today | Free models currently work anonymously (upstream gated them once via `FreeTierError` — backup: one-time Zen login, scripts persist it in `data/`, exe wipes it unless `--persist-auth`, or `OPENCODE_API_KEY` per session, never stored) |
 | Concurrent runs | Each run gets its own folder — no sharing, no locks |
 
 ## Verify zero traces
@@ -248,7 +252,9 @@ For distribution: `pack-release.ps1` builds `opencode-portable-win-x64.zip`, `pa
 | `--watch <pid> <ticks> <dir>` | Watchdog mode (spawned automatically, orphan hop) |
 | `--watch-hop <pid> <ticks> <dir>` | Internal hop: spawns the detached `--watch` grandchild and exits (do not call directly) |
 | `--clean <dir>` | Sweep stale roots without launching; errors on missing dir |
-| `--clean-host` | Remove own host traces (WER archives, watchdog telemetry, TEMP crash/update dirs); always exit 0 |
+| `--clean-host` | Remove own host traces (WER archives, watchdog telemetry, TEMP crash/update dirs); always exit 0. Never touches the opt-in `auth/` dir — use `--forget-auth` |
+| `--persist-auth` | Keep Zen login across runs in `<exe-dir>/auth/` (also `OPENCODE_PORTABLE_PERSIST_AUTH=1`); only `auth.json` survives, everything else is still wiped |
+| `--forget-auth` | Delete the persistent `auth/` dir (explicit logout); exit 0 |
 | `--check-update` | Check our own GitHub releases for a newer portable; explicit network, else offline |
 | `--update [--yes]` | Download + `.sha256`-verify + stage new portable (`.new.exe` + detached replace); prompts unless `--yes` |
 | `--self-test` | Non-UI COM smoke test only (instantiate + options + WER-silenced check, never `Show` — needs no human click) |

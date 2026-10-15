@@ -18,12 +18,16 @@
   <a href="https://github.com/terzastella/opencode-portable/actions"><img src="https://github.com/terzastella/opencode-portable/actions/workflows/build.yml/badge.svg" alt="CI build"></a>
 </p>
 
-> Pensato per i modelli gratuiti integrati di opencode — niente login, niente
-> provider da collegare. I provider esterni (NVIDIA, Anthropic, OpenAI, …)
+> I modelli free al momento vanno senza login (verificato ott 2026) — ma
+> upstream li ha già bloccati una volta lato server (`FreeTierError`, sett
+> 2026) e potrebbe rifarlo. Piano B già pronto: login Zen una-tantum
+> (`opencode auth login`, oppure `OPENCODE_API_KEY` al volo): gli script lo
+> persistono in `data/`, l'exe lo cancella a ogni run salvo opt-in con
+> `--persist-auth`. I provider esterni (NVIDIA, Anthropic, OpenAI, …)
 > **non sono stati testati** con questo progetto: le API key si possono dare
 > al volo ma le configurazioni provider non sono verificate.
 >
-> Testato con opencode `1.19.0` (versione snapshot; gli script di setup usano `UPSTREAM_VERSION` pinnata). La v2 (`2.x`, npm tgz) resta opt-in via `-Version` per prove: il suo free tier richiede login Zen lato server.
+> Testato con opencode `1.19.0` (versione snapshot; gli script di setup usano `UPSTREAM_VERSION` pinnata). La v2 (`2.x`, npm tgz) resta opt-in via `-Version` per prove.
 
 ## Download
 
@@ -51,7 +55,7 @@ if ((Get-FileHash OpencodePortable.exe -Algorithm SHA256).Hash.ToLower() -ne (Ge
 | Isolamento | Config, dati, cache, stato e temp in `<workspace>/.opencode-portable-<data-ora>-<pid>-<rand>/`, cancellata all'uscita — normale, X/Alt+F4, Ctrl+C e kill Task Manager inclusi |
 | Offline | Binario opencode incorporato, estratto al primo avvio — il launcher non scarica mai nulla (il traffico dei modelli opencode e i controlli reputazione OS usano comunque rete) |
 | Avvio veloce | Salta il fetch bloccante di 10–30 s da `models.dev` |
-| Niente login salvato | I modelli free integrati funzionano subito; le API key si danno al volo, mai salvate |
+| Niente login oggi | I free al momento vanno anonimi (upstream li ha bloccati una volta via `FreeTierError` — backup: login Zen una-tantum, gli script lo tengono in `data/`, l'exe lo cancella salvo `--persist-auth`, oppure `OPENCODE_API_KEY` al volo, mai salvata) |
 | Istanze concorrenti | Ognuna ha la sua cartella — niente condivisioni, niente lock |
 
 ## Verifica zero tracce
@@ -244,7 +248,9 @@ Per distribuire: `pack-release.ps1` fa `opencode-portable-win-x64.zip`, `pack-re
 | `--watch <pid> <ticks> <dir>` | Modalità guardiano (avviata da sola, hop orfano) |
 | `--watch-hop <pid> <ticks> <dir>` | Hop interno: genera il nipote `--watch` staccato ed esce (non chiamare direttamente) |
 | `--clean <dir>` | Spazza le root stale senza avviare nulla; errore se manca la dir |
-| `--clean-host` | Rimuove le nostre tracce host (archivi WER, telemetria, dir crash/update TEMP); sempre exit 0 |
+| `--clean-host` | Rimuove le nostre tracce host (archivi WER, telemetria, dir crash/update TEMP); sempre exit 0. Mai la dir `auth/` opt-in — usa `--forget-auth` |
+| `--persist-auth` | Tiene il login Zen tra i run in `<exe>/auth/` (anche `OPENCODE_PORTABLE_PERSIST_AUTH=1`); solo `auth.json` sopravvive, il resto si cancella |
+| `--forget-auth` | Cancella la dir `auth/` persistente (logout esplicito); exit 0 |
 | `--check-update` | Controlla le nostre GitHub releases per un portable più nuovo; rete solo esplicita |
 | `--update [--yes]` | Scarica + verifica `.sha256` + staging nuovo portable (`.new.exe` + replace staccato); chiede conferma salvo `--yes` |
 | `--self-test` | Smoke test COM solo non-UI (istanzia + opzioni + check WER, mai `Show` — niente click umani) |

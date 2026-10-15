@@ -95,11 +95,28 @@ and `--update [--yes]` do:
 
 ## Auth note
 
-This project is designed for opencode's **built-in free models: no login, no
-external providers to connect**. `OPENCODE_CONFIG` (and therefore any
-`opencode auth login` state) is **per run** for the exe (fresh root every
-launch, deleted on exit) and persistent per folder for the scripts
-(`<root>/config/opencode.json`). If you ever need other models, provider API
-keys are typed per session or exported in your shell profile
+Free models currently work with **no login** (verified Oct 2026 against the
+1.19.0 payload: fresh root, no `auth.json` anywhere, no key in env). But
+upstream gated them server-side before (`FreeTierError`, Sep 2026, hit even
+official builds) and may do it again — so a one-time-login backup is built
+in, not bolted on:
+
+- `opencode auth login` (browser/OAuth) writes `$XDG_DATA_HOME/opencode/auth.json`
+  (verified in the 1.19.0 binary; fallback `~/.opencode/auth.json`, covered by
+  the host guard). Scripts persist it automatically (`data/` survives runs).
+  The exe wipes it with the root **unless** `--persist-auth` (or
+  `OPENCODE_PORTABLE_PERSIST_AUTH=1`): then `<exe-dir>/auth/auth.json` is
+  seeded into each fresh root and copied back atomically before deletion
+  (normal exit + console-close handler; watchdog/sweeper kills keep the
+  last-good copy, re-login only in rare rotation races). `--forget-auth`
+  deletes it (explicit logout); `--clean-host` never touches it.
+- `OPENCODE_API_KEY` per session (inherited env, never stored, never logged):
+  no files at all, works on every flow including stock exe. Best for
+  multi-PC without carrying credentials.
+
+Bearer tokens at rest: whoever holds `data/` or `<exe>/auth/` is you on any
+PC (roams with the USB stick — the point). BitLocker-encrypt portable
+drives; revoke from `opencode.ai/console` if lost. Never share or publish
+`data/`, `.opencode-portable-*/` or `<exe>/auth/` — they may hold credentials.
+Other providers' keys are typed per session or exported in your shell profile
 (e.g. `ANTHROPIC_API_KEY`) — never stored by this project.
-Never share or publish `data/` or `.opencode-portable-*/` — they may hold credentials.

@@ -44,6 +44,8 @@ try {
   if ($env:TEMP) { $p = Join-Path $env:TEMP 'opencode'; $SysTargets += @{ Path = $p; Existed = (Test-Path -LiteralPath $p) } }
   if ($env:LOCALAPPDATA) { $p = Join-Path $env:LOCALAPPDATA 'opencode'; $SysTargets += @{ Path = $p; Existed = (Test-Path -LiteralPath $p) } }
   if ($env:APPDATA) { $p = Join-Path $env:APPDATA 'opencode'; $SysTargets += @{ Path = $p; Existed = (Test-Path -LiteralPath $p) } }
+  # Fallback auth di opencode quando XDG_DATA_HOME manca (~/.opencode/auth.json)
+  if ($env:USERPROFILE) { $p = Join-Path $env:USERPROFILE '.opencode'; $SysTargets += @{ Path = $p; Existed = (Test-Path -LiteralPath $p) } }
 
   # Temp isolata per questa run (sicura anche con istanze concorrenti)
   $RunId = 'run-{0:yyyyMMdd-HHmmss}-{1}-{2}' -f (Get-Date), $PID, (Get-Random -Maximum 100000)

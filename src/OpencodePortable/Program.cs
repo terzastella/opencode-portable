@@ -328,6 +328,7 @@ internal static class Program
         // Launcher-owned args (stripped, never forwarded to opencode).
         bool allowPath = Environment.GetEnvironmentVariable("OPENCODE_ALLOW_PATH_FALLBACK") == "1";
         bool forceConsole = false;
+        bool persistAuth = Environment.GetEnvironmentVariable("OPENCODE_PORTABLE_PERSIST_AUTH") == "1";
         string? pickerExe = null;
         string? workspace = null;
         var fwd = new List<string>();
@@ -335,6 +336,7 @@ internal static class Program
         {
             if (args[i] == "--from-path") { allowPath = true; continue; }
             if (args[i] == "--console") { forceConsole = true; continue; }
+            if (args[i] == "--persist-auth") { persistAuth = true; continue; }
             if (args[i] == "--picker-exe") { if (!TestsEnabled()) return 1; if (i + 1 >= args.Length) { Console.Error.WriteLine("[opencode-portable] ERRORE: --picker-exe richiede un percorso."); return 1; } pickerExe = args[++i]; if (string.IsNullOrWhiteSpace(pickerExe)) { Console.Error.WriteLine("[opencode-portable] ERRORE: --picker-exe richiede un percorso non vuoto."); return 1; } continue; }
             if (args[i].StartsWith("--picker-exe=", StringComparison.Ordinal)) { if (!TestsEnabled()) return 1; pickerExe = args[i]["--picker-exe=".Length..]; if (string.IsNullOrWhiteSpace(pickerExe)) { Console.Error.WriteLine("[opencode-portable] ERRORE: --picker-exe= richiede un percorso non vuoto."); return 1; } continue; }
             if (args[i] == "--workspace") { if (i + 1 >= args.Length) { Console.Error.WriteLine("[opencode-portable] ERRORE: --workspace richiede una cartella."); return 1; } workspace = args[++i]; if (workspace.StartsWith("--", StringComparison.Ordinal)) { Console.Error.WriteLine("[opencode-portable] ERRORE: --workspace richiede una cartella, non un flag."); return 1; } continue; }
@@ -507,6 +509,18 @@ internal static class Program
                 if (!TestsEnabled()) return 1;
                 return Updater.TestUpdateVerify();
             }
+            if (args[i] == "--test-auth-roundtrip")
+            {
+                if (!TestsEnabled()) return 1;
+                return PortableRun.TestAuthRoundtrip();
+            }
+            if (args[i] == "--forget-auth")
+            {
+                // Explicit logout: removes the opt-in persistent auth dir
+                // next to the exe. Needs no workspace. --clean-host never
+                // touches it (credentials are never deleted silently).
+                return PortableRun.ForgetPersistedAuth(Path.Combine(root, "auth"));
+            }
             if (args[i] == "--clean")
             {
                 // Sweep stale roots on demand (e.g. after a Task Manager kill),
@@ -678,7 +692,18 @@ internal static class Program
         string? resolved = ResolveBinary(root, bin, allowPath);
         if (resolved is null) { CleanupRoot(data); return 1; }
 
-        return PortableRun.Execute(data, cfg, workFull, resolved, fwd);
+        // Opt-in persistent login: seed last-good tokens into the fresh root.
+        // Everything else still dies with the root; only auth.json survives
+        // (copied back in Execute's finally + close handler).
+        string? authDir = null;
+        if (persistAuth)
+        {
+            authDir = Path.Combine(root, "auth");
+            PortableRun.SeedPersistedAuth(data, authDir);
+            Console.Error.WriteLine("[opencode-portable] auth persistente attiva: il login sopravvive ai run (--forget-auth per rimuoverla).");
+        }
+
+        return PortableRun.Execute(data, cfg, workFull, resolved, fwd, authDir);
     }
 
     /// <summary>

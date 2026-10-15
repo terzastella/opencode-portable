@@ -19,6 +19,12 @@ stay as prior releases); older entries below are kept as change history. The
   `OpencodePortable.new.exe` + detached replace (running exe is locked),
   temp in unique host-TEMP dir swept next run / via `--clean-host`.
   Normal runs stay offline: no network unless you ask.
+- Persistent login (backup, already built): free models currently work with no
+  login (verified Oct 2026), but upstream gated them server-side before
+  (`FreeTierError`, Sep 2026) and may do it again — then one-time Zen login:
+  scripts persist it in `data/`, the exe offers opt-in `--persist-auth`
+  (`<exe>/auth/auth.json` seed + atomic copy-back, `--forget-auth` to wipe,
+  never touched by `--clean-host`); `OPENCODE_API_KEY` per session needs no files.
 - Portable version `1.3.6` → `1.4.0`.
 
 ## [v1.3.6]

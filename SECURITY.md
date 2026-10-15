@@ -25,19 +25,28 @@ updates — download the newest `OpencodePortable.exe` from
 - `--clean-host` removes our WER/watchdog/crash/update leftovers but may need admin
   for `%ProgramData%` archives; a standard user can only clean their own
   profile. Exit code stays 0 with a skipped count — read the output.
-- Self-updater (`--check-update` / `--update`) is explicit-only: normal runs
+  It never touches the opt-in `<exe>/auth/` dir: credentials are never
+  deleted silently, use `--forget-auth` for explicit logout.
+- Self-updater: explicit `--check-update` / `--update` only; normal runs
   never use the network. Updates check our own portable releases over HTTPS,
   verify the release `.sha256` fail-closed (missing/mismatch aborts), never
   send tokens in argv, stage `.new.exe` for a detached replace (the running
   exe is locked on Windows). Review the output before restarting.
+- Persistent auth (`--persist-auth`) is bearer tokens at rest next to the exe:
+  BitLocker-encrypt portable drives; a lost stick means lost credentials until
+  you revoke the key from `opencode.ai/console`. `--forget-auth` wipes it.
 - Lost or stolen media means lost credentials: BitLocker-encrypt portable
   drives and dismount them; EFS is not portable across machines.
 - "Zero traces" means application files and known runtime artifacts are
   removed (see README checklist). It is **not** forensic anti-tracking: OS and
   security telemetry (Prefetch, Defender/SmartScreen, USN Journal, shell
   history, antivirus logs) cannot be removed by any portable app.
-- No login or credentials are stored by the launcher itself. Provider API keys
-  are typed per session; never share `data/` or `.opencode-portable-*/` folders.
+- No login or credentials are stored by the launcher itself, except the
+  explicit opt-in `<exe>/auth/` (`--persist-auth`) and the scripts' `data/`
+  (which persists `opencode auth login` state by design). Provider API keys
+  stay per-session via env (e.g. `OPENCODE_API_KEY`); never share `data/`,
+  `.opencode-portable-*/` or `<exe>/auth/` folders. Lost media = revoke the
+  key from `opencode.ai/console` and rotate.
 - External providers (NVIDIA, Anthropic, OpenAI, …) are **untested** with this
   project. No warranty on provider setups.
 

@@ -27,9 +27,10 @@ export OPENCODE_CONFIG="$ROOT/config/opencode.json"
 # No blocking models.dev fetch at startup (10-30s): use cache/builtin
 export OPENCODE_DISABLE_MODELS_FETCH=1
 
-# Snapshot of system locations BEFORE redirect (guard: only remove what this run creates)
+# Snapshot of system locations BEFORE redirect (guard: only remove what this run creates).
+# $HOME/.opencode is opencode's auth fallback when XDG_DATA_HOME is missing.
 SYS_TARGETS=()
-for p in "$HOME/.config/opencode" "$HOME/.local/share/opencode" "$HOME/.cache/opencode"; do
+for p in "$HOME/.config/opencode" "$HOME/.local/share/opencode" "$HOME/.cache/opencode" "$HOME/.opencode"; do
   if [ -e "$p" ]; then
     SYS_TARGETS+=("$p|1")
   else
