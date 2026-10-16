@@ -4,6 +4,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials onl
 
 ## [Unreleased]
 
+- `.cmd` launcher: `CALL` .cmd/.bat children so control (and cleanup) always
+  returns; binary resolution moved before tmp creation so early exits leave
+  nothing behind. Known limit (pure batch): raw `& | ^` in CLI args may
+  mangle and empty-string args truncate forwarding — use the `.ps1` launcher
+  for exotic arguments.
 - Build order: `publish-fat.ps1` verifies provenance *before* recording the
   pin, so a failed check can no longer leave the pin file modified.
 - `.cmd` sweeper scoped by ownership marker (`.portable-cmd`): never touches

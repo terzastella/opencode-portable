@@ -46,6 +46,48 @@ REM lo impostiamo sempre, ma un figlio che ignora i redirect potrebbe scriverci.
 SET "SYS_HOME_OPENC=%USERPROFILE%\.opencode"
 IF EXIST "%SYS_HOME_OPENC%" (SET "SYS_HOME_EXISTS=1") ELSE (SET "SYS_HOME_EXISTS=0")
 
+REM Risoluzione binario PRIMA di creare tmp: le uscite anticipate (binario
+REM mancante) non lasciano directory temporanee.
+REM EXE bundled. Fallback a opencode da PATH SOLO con opt-in esplicito
+REM (--from-path ovunque tra gli argomenti, o OPENCODE_ALLOW_PATH_FALLBACK=1):
+REM senza opt-in un eseguibile omonimo nel PATH verrebbe lanciato in silenzio.
+SET "BIN=%ROOT%\bin\opencode.exe"
+SET "ALLOW_PATH=0"
+IF /I "%OPENCODE_ALLOW_PATH_FALLBACK%"=="1" SET "ALLOW_PATH=1"
+REM Ricostruisci gli argomenti togliendo --from-path (ovunque sia): SHIFT non
+REM tocca %*, quindi %* inoltrerebbe il flag al figlio. Re-quoting uniforme.
+REM NOTA fedeltà: metacaratteri grezzi (& | ^) e stringhe vuote negli argomenti
+REM CLI possono alterarsi/troncarsi in transito (limite di cmd.exe, non aggirabile
+REM in puro batch); per argomenti esotici usare opencode-portable.ps1 (exact).
+SET "FWD="
+:argloop
+IF "%~1"=="" GOTO :argdone
+IF "%~1"=="--from-path" (SET "ALLOW_PATH=1" & SHIFT /1 & GOTO :argloop)
+SET "FWD=%FWD% "%~1""
+SHIFT /1
+GOTO :argloop
+:argdone
+IF EXIST "%BIN%" GOTO :runbin
+IF "%ALLOW_PATH%"=="0" (
+  ECHO [opencode-portable] ERRORE: "%BIN%" non trovato.
+    ECHO [opencode-portable] Esegui scripts\setup.ps1 per scaricarlo, oppure riusa opencode da PATH con --from-path o OPENCODE_ALLOW_PATH_FALLBACK=1.
+  ENDLOCAL & EXIT /B 1
+)
+WHERE opencode >NUL 2>&1
+IF ERRORLEVEL 1 (
+  ECHO [opencode-portable] ERRORE: nessun opencode in PATH.
+  ENDLOCAL & EXIT /B 1
+)
+SET "BIN_FROM_PATH="
+FOR /F "delims=" %%B IN ('WHERE opencode 2^>NUL') DO IF NOT DEFINED BIN_FROM_PATH SET "BIN_FROM_PATH=%%B"
+IF NOT DEFINED BIN_FROM_PATH (
+  ECHO [opencode-portable] ERRORE: impossibile risolvere opencode in PATH.
+  ENDLOCAL & EXIT /B 1
+)
+SET "BIN=%BIN_FROM_PATH%"
+ECHO [opencode-portable] ATTENZIONE: uso opencode da PATH: "%BIN%"
+:runbin
+
 REM Temp isolata per questa run (sicura anche con istanze concorrenti).
 REM NOTA: %TIME% dipende dal locale (separatori diversi, spazi): sanitizza.
 SET "RAWTIME=%TIME: =0%"
@@ -83,48 +125,29 @@ SET "TMP=%RUN_TMP%"
 SET "TEMP=%RUN_TMP%"
 SET "TMPDIR=%RUN_TMP%"
 
-REM EXE bundled. Fallback a opencode da PATH SOLO con opt-in esplicito
-REM (--from-path ovunque tra gli argomenti, o OPENCODE_ALLOW_PATH_FALLBACK=1):
-REM senza opt-in un eseguibile omonimo nel PATH verrebbe lanciato in silenzio.
-SET "BIN=%ROOT%\bin\opencode.exe"
-SET "ALLOW_PATH=0"
-IF /I "%OPENCODE_ALLOW_PATH_FALLBACK%"=="1" SET "ALLOW_PATH=1"
-REM Ricostruisci gli argomenti togliendo --from-path (ovunque sia): SHIFT non
-REM tocca %*, quindi %* inoltrerebbe il flag al figlio. Re-quoting uniforme.
-SET "FWD="
-:argloop
-IF "%~1"=="" GOTO :argdone
-IF "%~1"=="--from-path" (SET "ALLOW_PATH=1" & SHIFT /1 & GOTO :argloop)
-SET "FWD=%FWD% "%~1""
-SHIFT /1
-GOTO :argloop
-:argdone
-IF EXIST "%BIN%" GOTO :runbin
-IF "%ALLOW_PATH%"=="0" (
-  ECHO [opencode-portable] ERRORE: "%BIN%" non trovato.
-    ECHO [opencode-portable] Esegui scripts\setup.ps1 per scaricarlo, oppure riusa opencode da PATH con --from-path o OPENCODE_ALLOW_PATH_FALLBACK=1.
-  ENDLOCAL & EXIT /B 1
-)
-WHERE opencode >NUL 2>&1
-IF ERRORLEVEL 1 (
-  ECHO [opencode-portable] ERRORE: nessun opencode in PATH.
-  ENDLOCAL & EXIT /B 1
-)
-SET "BIN_FROM_PATH="
-FOR /F "delims=" %%B IN ('WHERE opencode 2^>NUL') DO IF NOT DEFINED BIN_FROM_PATH SET "BIN_FROM_PATH=%%B"
-IF NOT DEFINED BIN_FROM_PATH (
-  ECHO [opencode-portable] ERRORE: impossibile risolvere opencode in PATH.
-  ENDLOCAL & EXIT /B 1
-)
-SET "BIN=%BIN_FROM_PATH%"
-ECHO [opencode-portable] ATTENZIONE: uso opencode da PATH: "%BIN%"
-:runbin
-
-"%BIN%" %FWD%
-SET "EXITCODE=%ERRORLEVEL%"
-REM Cleanup best-effort della sola tmp di questa run (mai il codice d'uscita)
+REM Esegui il figlio. CALL per .cmd/.bat (senza, il controllo non torna e la
+REM cleanup sotto non gira mai). Delayed expansion solo in questo blocco: così
+REM i metacaratteri già quotati in FWD non vengono reinterpretati in uscita.
+IF /I "%BIN:~-4%"==".cmd" GOTO :runcmd
+IF /I "%BIN:~-4%"==".bat" GOTO :runcmd
+SETLOCAL EnableDelayedExpansion
+"!BIN!" !FWD!
+SET "EXITCODE=!ERRORLEVEL!"
+ENDLOCAL & SET "EXITCODE=%EXITCODE%"
+GOTO :afterrun
+:runcmd
+SETLOCAL EnableDelayedExpansion
+CALL "!BIN!" !FWD!
+SET "EXITCODE=!ERRORLEVEL!"
+ENDLOCAL & SET "EXITCODE=%EXITCODE%"
+GOTO :afterrun
+:afterrun
+REM Cleanup best-effort della sola tmp di questa run (mai il codice d'uscita).
+REM Retry breve: il runtime Bun mappa una sua DLL in TMPDIR e Defender scansiona
+REM i file nuovi; un singolo RMDIR perderebbe la race contro questi lock
+REM transitori. Fino a ~10s, poi i resti vanno allo sweeper al prossimo avvio.
 SET "MARKER_CHECK=%RUN_TMP:\data\tmp\run-=%"
-IF "%CLEAN_RUN_TMP%"=="1" IF NOT "%MARKER_CHECK%"=="%RUN_TMP%" IF EXIST "%RUN_TMP%" RMDIR /S /Q "%RUN_TMP%" 2>NUL
+IF "%CLEAN_RUN_TMP%"=="1" IF NOT "%MARKER_CHECK%"=="%RUN_TMP%" IF EXIST "%RUN_TMP%" CALL :delretry "%RUN_TMP%"
 IF "%TMPROOT_OPENC_EXISTS%"=="0" IF EXIST "%TMPROOT_OPENC%" RMDIR /S /Q "%TMPROOT_OPENC%" 2>NUL
 REM Cartelle opencode fuori dal portable: solo se generate da questa run
 REM (RMDIR per le dir, DEL per gli eventuali file: mirror di DeletePath)
@@ -135,3 +158,14 @@ IF DEFINED LOCALAPPDATA IF "%SYS_LOCAL_EXISTS%"=="0" IF EXIST "%SYS_LOCAL_OPENC%
 IF DEFINED APPDATA IF "%SYS_ROAM_EXISTS%"=="0" IF EXIST "%SYS_ROAM_OPENC%\NUL" (RMDIR /S /Q "%SYS_ROAM_OPENC%" 2>NUL) ELSE IF EXIST "%SYS_ROAM_OPENC%" DEL /F /Q "%SYS_ROAM_OPENC%" 2>NUL
 IF DEFINED USERPROFILE IF "%SYS_HOME_EXISTS%"=="0" IF EXIST "%SYS_HOME_OPENC%\NUL" (RMDIR /S /Q "%SYS_HOME_OPENC%" 2>NUL) ELSE IF EXIST "%SYS_HOME_OPENC%" DEL /F /Q "%SYS_HOME_OPENC%" 2>NUL
 ENDLOCAL & EXIT /B %EXITCODE%
+
+REM Sottoroutine di cancellazione con retry (chiamata solo da sopra, mai in
+REM caduta libera: dopo EXIT non si torna). Non tocca mai EXITCODE.
+:delretry
+FOR /L %%R IN (1,1,10) DO (
+  IF NOT EXIST "%~1" GOTO :EOF
+  RMDIR /S /Q "%~1" 2>NUL
+  IF NOT EXIST "%~1" GOTO :EOF
+  timeout /t 1 /nobreak >NUL 2>&1
+)
+GOTO :EOF
