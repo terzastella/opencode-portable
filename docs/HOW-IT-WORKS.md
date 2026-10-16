@@ -6,9 +6,9 @@ Windows app; the scripts cover scripted use and Linux/macOS.
 ## A. OpencodePortable.exe (Windows, recommended)
 
 One file to distribute (`dist/OpencodePortable.exe`, built with
-`scripts/publish-fat.ps1`). On a normal run it is fully stateless: **nothing
-is ever written next to the exe** (opt-in `--persist-auth` keeps an `auth/`
-dir, `--update` stages a `.new.exe` for the post-exit replace). Double-click flow:
+`scripts/publish-fat.ps1`). On a normal run nothing is written next to the exe,
+except opt-in `--persist-auth` (an `auth/` dir) and `--update` (a staged
+`.new.exe` for the post-exit replace). Double-click flow:
 
 1. **Workspace selection** — a supervised child process shows the native
    folder picker (`--pick-folder` protocol: `PICK-OK:<path>` (0),
