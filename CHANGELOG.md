@@ -4,6 +4,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials onl
 
 ## [Unreleased]
 
+## [v1.4.4] - 2026-10-16
+
+- Updater replace helper with retry (~12 s): a transient lock (AV) no longer
+  kills the one-shot detached `Move-Item` silently (CI `build-windows` flake
+  in `--test-update-replace`); opt-in `OPENCODE_REPLACE_LOG` captures the
+  helper error, printed by the test on failure (unset in production, no new
+  files next to the exe).
+
 ## [v1.4.3] - 2026-10-16
 
 - `gh` probes Stop-safe: `gh auth status` / `gh attestation verify` no longer
