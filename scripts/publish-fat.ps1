@@ -175,10 +175,18 @@ try {
   if (-not $IsV2) {
     $Gh = Get-Command gh -ErrorAction SilentlyContinue
     $ghAuthed = $false
+    # Stop-safe gh auth probe (BEGIN): `gh auth status` exits nonzero with
+    # stderr when unauthenticated; under $ErrorActionPreference='Stop' a
+    # merged stream would terminate instead of reaching $LASTEXITCODE.
     if ($Gh) {
-      $null = & gh auth status 2>&1
-      $ghAuthed = ($LASTEXITCODE -eq 0)
+      $prevEA = $ErrorActionPreference
+      try {
+        $ErrorActionPreference = 'Continue'
+        $null = & gh auth status *> $null
+        $ghAuthed = ($LASTEXITCODE -eq 0)
+      } finally { $ErrorActionPreference = $prevEA }
     }
+    # Stop-safe gh auth probe (END)
     if (-not $Gh) {
       Step "nota: `gh` assente, provenance non verificata (hash pin attivo)."
     } elseif (-not $ghAuthed) {
@@ -186,11 +194,19 @@ try {
     } else {
       $verified = $false
       $ghText = ""
+      # Stop-safe gh verify capture (BEGIN): same Stop hazard as the probe;
+      # $ghText needs the output, so keep `2>&1` and read $LASTEXITCODE at once.
       for ($r = 1; $r -le 2 -and -not $verified; $r++) {
-        $ghOut = & gh attestation verify $PayloadZip --repo 'anomalyco/opencode' --predicate-type 'https://in-toto.io/attestation/release/v0.2' 2>&1
-        if ($LASTEXITCODE -eq 0) { $verified = $true }
+        $prevEA = $ErrorActionPreference
+        try {
+          $ErrorActionPreference = 'Continue'
+          $ghOut = & gh attestation verify $PayloadZip --repo 'anomalyco/opencode' --predicate-type 'https://in-toto.io/attestation/release/v0.2' 2>&1
+          $code = $LASTEXITCODE
+        } finally { $ErrorActionPreference = $prevEA }
+        if ($code -eq 0) { $verified = $true }
         else { $ghText = ($ghOut | Out-String); if ($r -lt 2) { Start-Sleep 5 } }
       }
+      # Stop-safe gh verify capture (END)
       if ($verified) {
         Step "attestation verificata (provenance: anomalyco/opencode)."
       } elseif ($ghText -match '(?i)no attestation') {
