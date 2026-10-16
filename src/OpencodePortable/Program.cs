@@ -21,7 +21,8 @@ internal static class Program
         // Silence Windows Error Reporting for OUR crashes (including the
         // supervised picker-child AVs): they die with their exit code and never
         // land in %ProgramData%\...\WER\ReportArchive. Our own crash-*.log
-        // mechanism keeps diagnostics. Tradeoff, deliberate, for zero traces.
+        // mechanism keeps diagnostics. Tradeoff, deliberate, for best-effort
+        // cleanup (OS telemetry stays out of scope).
         try { SetErrorMode(SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS); } catch { }
         try
         {
@@ -642,7 +643,8 @@ internal static class Program
         }
 
         // Portable root: per-run, INSIDE the workspace. Deleting it on exit
-        // leaves zero traces; concurrent runs get separate roots (no sharing,
+        // leaves no app files behind (best-effort; OS telemetry out of
+        // scope); concurrent runs get separate roots (no sharing,
         // no locks, no double-delete hazards). Suffix from a CSPRNG (not
         // timestamp-seeded Random: unpredictable against pre-squat).
         string stamp = $"{DateTime.Now:yyyyMMdd-HHmmss}-{Environment.ProcessId}-{System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 999999)}";
