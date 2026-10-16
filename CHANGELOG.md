@@ -4,6 +4,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials onl
 
 ## [Unreleased]
 
+## [v1.4.2] - 2026-10-16
+
 - `.cmd` launcher: `CALL` .cmd/.bat children so control (and cleanup) always
   returns; binary resolution moved before tmp creation so early exits leave
   nothing behind. Known limit (pure batch): raw `& | ^` in CLI args may
