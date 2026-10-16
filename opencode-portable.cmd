@@ -61,15 +61,22 @@ MKDIR "%RUN_TMP%" 2>NUL
 SET "CLEAN_RUN_TMP=1"
 IF NOT EXIST "%RUN_TMP%" SET "CLEAN_RUN_TMP=0"
 IF "%CLEAN_RUN_TMP%"=="0" SET "RUN_TMP=%TMPROOT%"
+REM Marchio di proprietà: solo le tmp con questo file vengono spazzate sotto.
+REM Senza, lo sweeper per età non distinguerebbe le tmp vive degli altri
+REM launcher (ps1/sh usano lo stesso prefisso run-*).
+IF "%CLEAN_RUN_TMP%"=="1" TYPE NUL > "%RUN_TMP%\.portable-cmd" 2>NUL
 
 REM Foto della tmp del portable (guard: opencode potrebbe scriverci una cartella "opencode")
 SET "TMPROOT_OPENC=%TMPROOT%\opencode"
 IF EXIST "%TMPROOT_OPENC%" (SET "TMPROOT_OPENC_EXISTS=1") ELSE (SET "TMPROOT_OPENC_EXISTS=0")
 
 REM Sweeper: tmp di run morte da oltre 7 giorni (crash/kill). NOTA: cmd non
-REM conosce il PID (niente liveness check come ps1/sh/exe): tiene la soglia
-REM di 7 giorni per non toccare mai run recenti/concorrenti.
-FORFILES /P "%TMPROOT%" /M "run-*" /D -7 /C "CMD /C IF @isdir==TRUE RMDIR /S /Q @path" 2>NUL
+REM conosce il PID (niente liveness check come ps1/sh/exe): cancella solo le
+REM dir col marchio .portable-cmd creato sopra, così non tocca mai le tmp
+REM vive degli altri launcher. Resta la soglia di 7 giorni per non toccare
+REM run recenti/concorrenti; una sessione cmd viva da oltre 7 giorni resta
+REM un caso non supportato (usare ps1/exe per sessioni lunghissime).
+FORFILES /P "%TMPROOT%" /M "run-*" /D -7 /C "CMD /C IF @isdir==TRUE IF EXIST \"%TMPROOT%\@fname\.portable-cmd\" RMDIR /S /Q @path" 2>NUL
 
 REM Temp di opencode e processi figli nella tmp di questa run
 SET "TMP=%RUN_TMP%"
