@@ -313,6 +313,13 @@ internal static class Updater
             // Percorsi in single-quote con doubling (no $ expansion).
             string qNew = "'" + stagedNew.Replace("'", "''") + "'";
             string qCur = "'" + currentExe.Replace("'", "''") + "'";
+            // Log diagnostico solo opt-in (test): in produzione resta unset e
+            // l'helper non scrive nulla (il backstop resta StaleNewExe).
+            string log = Environment.GetEnvironmentVariable("OPENCODE_REPLACE_LOG") ?? "";
+            string qLog = "'" + log.Replace("'", "''") + "'";
+            // Retry ~12 s: un lock transitorio (AV sul file nuovo) ucciderebbe
+            // un Move-Item singolo senza lasciare traccia (helper detached con
+            // output scartato). Le graffe sono raddoppiate per l'interpolazione C#.
             var psi = new ProcessStartInfo
             {
                 FileName = shell,
@@ -322,7 +329,7 @@ internal static class Updater
             psi.ArgumentList.Add("-NoProfile");
             psi.ArgumentList.Add("-NonInteractive");
             psi.ArgumentList.Add("-Command");
-            psi.ArgumentList.Add($"Start-Sleep -Seconds 2; Move-Item -LiteralPath {qNew} -Destination {qCur} -Force");
+            psi.ArgumentList.Add($"$log={qLog}; $deadline=(Get-Date).AddSeconds(12); $err=''; Start-Sleep -Seconds 2; do {{ try {{ Move-Item -LiteralPath {qNew} -Destination {qCur} -Force; break }} catch {{ $err=$_.Exception.Message; Start-Sleep -Milliseconds 500 }} }} while ((Get-Date) -lt $deadline -and (Test-Path -LiteralPath {qNew})); if ((Test-Path -LiteralPath {qNew}) -and ($log -ne '')) {{ Add-Content -LiteralPath {qLog} -Value $err }}");
             using var p = Process.Start(psi);
             return p is not null;
         }
@@ -377,6 +384,8 @@ internal static class Updater
         try
         {
             Directory.CreateDirectory(baseDir);
+            string logPath = Path.Combine(baseDir, "replace-error.log");
+            Environment.SetEnvironmentVariable("OPENCODE_REPLACE_LOG", logPath);
             string cur = Path.Combine(baseDir, "OpencodePortable.exe");
             string nxt = Path.Combine(baseDir, StagedNewExeName);
             File.WriteAllText(cur, "OLD");
@@ -399,6 +408,16 @@ internal static class Updater
             bool absentNull = !done ? false : StaleNewExe(baseDir) is null;
             Console.WriteLine($"[test-update-replace] absent-null={absentNull}");
             bool ok = done && absentNull;
+            if (!ok)
+            {
+                try
+                {
+                    if (File.Exists(logPath)) Console.Error.WriteLine("[test-update-replace] helper-log: " + File.ReadAllText(logPath));
+                    else Console.Error.WriteLine("[test-update-replace] helper-log: (none)");
+                    foreach (string f in Directory.GetFiles(baseDir)) Console.Error.WriteLine("[test-update-replace] left: " + Path.GetFileName(f));
+                }
+                catch { }
+            }
             Console.WriteLine(ok ? "[test-update-replace] OK" : "[test-update-replace] FALLITO");
             return ok ? 0 : 1;
         }
@@ -409,6 +428,7 @@ internal static class Updater
         }
         finally
         {
+            try { Environment.SetEnvironmentVariable("OPENCODE_REPLACE_LOG", null); } catch { }
             try { Directory.Delete(baseDir, recursive: true); } catch { }
         }
     }
