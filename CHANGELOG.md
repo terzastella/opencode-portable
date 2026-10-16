@@ -4,6 +4,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials onl
 
 ## [Unreleased]
 
+## [v1.4.3] - 2026-10-16
+
+- `gh` probes Stop-safe: `gh auth status` / `gh attestation verify` no longer
+  terminate under `$ErrorActionPreference='Stop'` when `gh` is unauthenticated
+  (CI `build-fat` failed on the probe itself); unauthenticated now warns and
+  the hash pin governs, crypto failures still fail closed.
+
 ## [v1.4.2] - 2026-10-16
 
 - `.cmd` launcher: `CALL` .cmd/.bat children so control (and cleanup) always
