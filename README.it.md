@@ -193,7 +193,7 @@ I collegamenti avviano `opencode-portable.cmd` con l'icona di `assets/opencode-p
 | Isolamento | `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_STATE_HOME` → `data/...`, e `OPENCODE_CONFIG` → `config/opencode.json` |
 | Avvio veloce | `OPENCODE_DISABLE_MODELS_FETCH=1` (salta il fetch bloccante di 10–30 s da `models.dev`) |
 | Temp | Tmp isolata per run (`TMP/TEMP/TMPDIR` dentro, cancellata all'uscita). Nomi diversi per launcher: `run-HHMMSScc-RAND` (cmd, con centesimi e sanitizzazione locale), `run-aaaammgg-HHmmss-PID-rand` (ps1), `mktemp run-AAAAMMGG-HHMMSS-PID-XXX` (sh); l'exe non ha sottolivello (la root è già per-run) |
-| Residui da crash | Spazzati al giro dopo (exe + ps1 + sh: solo PID morti + nome stamp esatto, mai i vivi né le dir utente; cmd: età >7 giorni, senza check PID — divergenza documentata) |
+| Residui da crash | Spazzati al giro dopo (exe + ps1 + sh: solo PID morti + nome stamp esatto, mai i vivi né le dir utente; cmd: età >7 giorni + solo marchio proprio, senza check PID — sessioni cmd vive oltre 7 giorni non supportate) |
 | Guard anti-sporco | Foto di `%TEMP%\opencode`, `%LOCALAPPDATA%\opencode`, `%APPDATA%\opencode` (Win) o `~/.config/opencode`, `~/.local/share/opencode`, `~/.cache/opencode` (Unix): rimosse solo se create da quella run (l'exe copre anche `%USERPROFILE%\.config\opencode` + `.local\share\opencode`) |
 | Igiene env | `.ps1`/`.sh` ripristinano le variabili (`try/finally`, `trap`); istanze concorrenti sicure |
 

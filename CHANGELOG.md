@@ -4,6 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials onl
 
 ## [Unreleased]
 
+- Build order: `publish-fat.ps1` verifies provenance *before* recording the
+  pin, so a failed check can no longer leave the pin file modified.
+- `.cmd` sweeper scoped by ownership marker (`.portable-cmd`): never touches
+  other launchers' live tmp dirs; >7-day live cmd sessions documented as
+  unsupported.
+
 - Attestation gate fix: `gh` present but unauthenticated no longer fails the
   build/install (warn + hash pin governs, as if `gh` were absent); crypto
   failures still fail closed, with one retry against transient infra errors.
