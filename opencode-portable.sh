@@ -83,7 +83,7 @@ cleanup() {
       "$TMPROOT"/run-*) _port_retry=0
         while [ "$_port_retry" -lt 20 ] && [ -e "$RUN_TMP" ]; do
           rm -rf "$RUN_TMP" 2>/dev/null || true
-          if [ -e "$RUN_TMP" ]; then sleep 0.5; fi
+          if [ -e "$RUN_TMP" ]; then sleep 0.5 2>/dev/null || sleep 1 2>/dev/null || true; fi
           _port_retry=$((_port_retry + 1))
         done ;;
     esac
