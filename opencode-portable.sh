@@ -77,7 +77,15 @@ export TEMP="$RUN_TMP"
 cleanup() {
   if [ "$CLEAN_RUN_TMP" = "1" ] && [ -n "${RUN_TMP:-}" ] && [ -d "${RUN_TMP:-}" ]; then
     case "$RUN_TMP" in
-      "$TMPROOT"/run-*) rm -rf "$RUN_TMP" 2>/dev/null || true ;;
+      # Retry briefly: Bun maps a runtime DLL into TMPDIR and AV scans new
+      # files; a single delete loses the race against transient locks
+      # (~10 s budget; leftovers go to the sweeper).
+      "$TMPROOT"/run-*) _port_retry=0
+        while [ "$_port_retry" -lt 20 ] && [ -e "$RUN_TMP" ]; do
+          rm -rf "$RUN_TMP" 2>/dev/null || true
+          if [ -e "$RUN_TMP" ]; then sleep 0.5; fi
+          _port_retry=$((_port_retry + 1))
+        done ;;
     esac
   fi
   if [ "${TMPROOT_OPENC_EXISTS:-1}" = "0" ] && [ -e "$TMPROOT_OPENC" ]; then

@@ -130,7 +130,7 @@ if [ "${size:-0}" -lt 10485760 ]; then
   exit 1
 fi
 # Portable SHA-256: sha256sum (Linux), shasum -a 256 (macOS/BSD).
-# Prints the hex digest, or fails when no tool exists (caller warns loudly).
+# Prints the hex digest, or fails when no tool exists (caller fails closed when a pin exists).
 sha256_of() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1;
   elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1;
@@ -148,7 +148,8 @@ if [ -f "$ROOT/UPSTREAM_VERSION.sha256" ]; then
       fi
       echo "[setup] hash pin verified."
     else
-      echo "[setup] WARNING: no SHA-256 tool (sha256sum/shasum) — recorded hash NOT verified, TLS-only trust." >&2
+      echo "[setup] ERROR: no SHA-256 tool (sha256sum/shasum) — recorded hash cannot be verified, refusing install." >&2
+      exit 1
     fi
   else
     echo "[setup] WARNING: no recorded hash for $target v$VERSION, TLS-only trust." >&2

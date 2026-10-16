@@ -166,6 +166,8 @@ FOR /L %%R IN (1,1,10) DO (
   IF NOT EXIST "%~1" GOTO :EOF
   RMDIR /S /Q "%~1" 2>NUL
   IF NOT EXIST "%~1" GOTO :EOF
-  timeout /t 1 /nobreak >NUL 2>&1
+  REM Pausa ~1s senza dipendere da stdin/console: timeout.exe fallisce con
+  REM input ridirezionato (uso pipato, CI), mentre ping su loopback no.
+  ping -n 2 127.0.0.1 >NUL 2>&1
 )
 GOTO :EOF

@@ -45,8 +45,9 @@ if ((Get-FileHash OpencodePortable.exe -Algorithm SHA256).Hash.ToLower() -ne (Ge
 1. **Doppio-click** su `OpencodePortable.exe`.
 2. **Scegli la cartella di lavoro** (dialog esplora-file, o trascinala nella console).
 3. **Lavora.** Alla chiusura, tutto ciò che l'app ha scritto — config, cache,
-   stato, tmp, binario — viene cancellato con la cartella per-run. Niente viene
-   mai scritto accanto all'exe.
+   stato, tmp, binario — viene cancellato con la cartella per-run. Niente altro
+   viene scritto accanto all'exe, salvo `auth/` opt-in (`--persist-auth`) e
+   `OpencodePortable.new.exe` di staging (`--update`).
 
 ## Perché portatile
 

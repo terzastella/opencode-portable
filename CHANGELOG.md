@@ -18,6 +18,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) (essentials onl
 - Attestation gate fix: `gh` present but unauthenticated no longer fails the
   build/install (warn + hash pin governs, as if `gh` were absent); crypto
   failures still fail closed, with one retry against transient infra errors.
+- `setup.sh`: missing SHA-256 tool with a recorded pin now fails closed
+  (`exit 1`) instead of TLS-only warn — matches the fail-closed comment and
+  the `setup.ps1` mirror.
+- Docs honesty: Quickstart no longer claims "nothing ever next to the exe"
+  (exceptions: opt-in `auth/`, staged `.new.exe`); `HOW-IT-WORKS` heading
+  `zero-trace` renamed to best-effort cleanup.
+- Launchers: retry delete of per-run tmp (~10 s, mirrors exe `RobustDelete`);
+  `.cmd` pause via `ping` loopback so piped/CI stdin no longer breaks cleanup.
 
 ## [v1.4.1] - 2026-10-15
 

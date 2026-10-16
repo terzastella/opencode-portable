@@ -48,8 +48,9 @@ if ((Get-FileHash OpencodePortable.exe -Algorithm SHA256).Hash.ToLower() -ne (Ge
 1. **Double-click** `OpencodePortable.exe`.
 2. **Pick the work folder** (explorer dialog, or drag-and-drop it into the console).
 3. **Work.** On close, everything the app wrote — config, cache, state, tmp,
-   binary — is deleted with the per-run folder. Nothing is ever written next
-   to the exe.
+   binary — is deleted with the per-run folder. Nothing else is written next
+   to the exe, except opt-in `auth/` (`--persist-auth`) and staged update
+   `OpencodePortable.new.exe` (`--update`).
 
 ## Why portable
 

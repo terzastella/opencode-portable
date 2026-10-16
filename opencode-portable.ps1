@@ -105,7 +105,13 @@ try {
   # Cleanup best-effort della sola tmp di questa run (mai il codice d'uscita)
   $sep = [IO.Path]::DirectorySeparatorChar
   if ($CleanRunTmp -and $RunTmp -and $RunTmp.StartsWith($TmpRoot + $sep, [StringComparison]::OrdinalIgnoreCase)) {
-    Remove-Item -LiteralPath $RunTmp -Recurse -Force -ErrorAction SilentlyContinue
+    # Retry briefly: Bun maps a runtime DLL into TMPDIR and AV scans new
+    # files; a single delete loses the race against transient locks
+    # (~10 s budget, mirrors the exe RobustDelete; leftovers go to the sweeper).
+    for ($i = 0; $i -lt 20 -and (Test-Path -LiteralPath $RunTmp); $i++) {
+      Remove-Item -LiteralPath $RunTmp -Recurse -Force -ErrorAction SilentlyContinue
+      if (Test-Path -LiteralPath $RunTmp) { Start-Sleep -Milliseconds 500 }
+    }
   }
   if ($TmpRootOpenc -and -not $TmpRootOpencExisted -and (Test-Path -LiteralPath $TmpRootOpenc)) {
     Remove-Item -LiteralPath $TmpRootOpenc -Recurse -Force -ErrorAction SilentlyContinue

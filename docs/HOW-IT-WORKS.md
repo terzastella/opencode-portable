@@ -78,7 +78,7 @@ Config, data, cache and logs stay inside `./data` next to the scripts.
 - `scripts/publish-fat.ps1` → uses the pinned version from `UPSTREAM_VERSION` (explicit `-Version/-Arch` win, RID matched), downloads v1 zip or v2 tgz (v2 re-zipped as `opencode.zip` so the runtime stays zip-only), embeds the zip, publishes the all-in-one exe into `dist/` (never committed), verifies via `--has-payload`
 - `scripts/pack-release.ps1` → `opencode-portable-win-x64.zip`; `scripts/pack-release.sh` → `opencode-portable-linux-macos.tar.gz`. Both secret-scan and never include `data/`, `bin/*`, `dist/` or local configs.
 
-## Self-updater (portable, explicit, zero-trace)
+## Self-updater (portable, explicit, best-effort cleanup)
 
 Normal runs never touch the network (offline-first). Only `--check-update`
 and `--update [--yes]` do:
